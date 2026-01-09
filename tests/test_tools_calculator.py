@@ -152,37 +152,6 @@ class TestGetSpeedBenchmarks:
         assert "error" in result
 
 
-class TestGetTypeWeaknesses:
-    """Tests for get_type_weaknesses tool."""
-
-    @pytest.fixture
-    def mock_mcp(self):
-        """Create mock MCP and register tools."""
-        from smogon_vgc_mcp.tools.calculator import register_calculator_tools
-
-        mcp = MockFastMCP()
-        register_calculator_tools(mcp)
-        return mcp
-
-    @pytest.mark.asyncio
-    @patch("smogon_vgc_mcp.tools.calculator.get_pokemon_weaknesses")
-    async def test_returns_weaknesses(self, mock_get_weak, mock_mcp):
-        """Test returning weaknesses."""
-        mock_get_weak.return_value = {
-            "pokemon": "Incineroar",
-            "types": ["Fire", "Dark"],
-            "4x_weak": [],
-            "2x_weak": ["Water", "Fighting", "Ground", "Rock"],
-            "immunities": ["Psychic"],
-        }
-
-        get_type_weaknesses = mock_mcp.tools["get_type_weaknesses"]
-        result = await get_type_weaknesses("Incineroar")
-
-        assert result["pokemon"] == "Incineroar"
-        assert "Water" in result["2x_weak"]
-
-
 class TestAnalyzeTeamTypeCoverage:
     """Tests for analyze_team_type_coverage tool."""
 
@@ -214,46 +183,6 @@ class TestAnalyzeTeamTypeCoverage:
 
         assert "team" in result
         assert len(result["team"]) == 2
-
-
-class TestGetPokemonBaseStats:
-    """Tests for get_pokemon_base_stats tool."""
-
-    @pytest.fixture
-    def mock_mcp(self):
-        """Create mock MCP and register tools."""
-        from smogon_vgc_mcp.tools.calculator import register_calculator_tools
-
-        mcp = MockFastMCP()
-        register_calculator_tools(mcp)
-        return mcp
-
-    @pytest.mark.asyncio
-    @patch("smogon_vgc_mcp.tools.calculator.get_pokemon_types")
-    @patch("smogon_vgc_mcp.tools.calculator.get_base_stats")
-    async def test_returns_base_stats(self, mock_base, mock_types, mock_mcp):
-        """Test returning base stats."""
-        mock_base.return_value = {"hp": 95, "atk": 115, "def": 90, "spa": 80, "spd": 90, "spe": 60}
-        mock_types.return_value = ["Fire", "Dark"]
-
-        get_pokemon_base_stats = mock_mcp.tools["get_pokemon_base_stats"]
-        result = await get_pokemon_base_stats("Incineroar")
-
-        assert result["pokemon"] == "Incineroar"
-        assert result["types"] == ["Fire", "Dark"]
-        assert result["base_stats"]["atk"] == 115
-        assert result["bst"] == 530  # Sum of all base stats
-
-    @pytest.mark.asyncio
-    @patch("smogon_vgc_mcp.tools.calculator.get_base_stats")
-    async def test_returns_error_when_not_found(self, mock_base, mock_mcp):
-        """Test returning error when Pokemon not found."""
-        mock_base.return_value = None
-
-        get_pokemon_base_stats = mock_mcp.tools["get_pokemon_base_stats"]
-        result = await get_pokemon_base_stats("NotAPokemon")
-
-        assert "error" in result
 
 
 class TestAnalyzeMoveCoverage:

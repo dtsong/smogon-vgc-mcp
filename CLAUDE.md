@@ -93,20 +93,23 @@ npx @modelcontextprotocol/inspector uv run smogon-vgc-mcp
 
 ### Stat Calculator
 - `calculate_pokemon_stats` - Calculate actual stat values at Level 50
-- `get_pokemon_base_stats` - Get base stats and BST
 - `compare_pokemon_speeds` - Compare speed between two Pokemon
 - `get_speed_benchmarks` - Find what notable Pokemon a speed stat outspeeds/underspeeds
 
 ### Type Analysis
-- `get_type_weaknesses` - Get type matchups for a Pokemon (4x weak, 2x weak, resists, immunities)
 - `analyze_team_type_coverage` - Analyze shared weaknesses/resistances for a team
 - `analyze_move_coverage` - Analyze offensive type coverage of a moveset
 
 ### Damage Calculator
-- `calc_damage` - Calculate damage with full modifiers (items, abilities, tera, weather, terrain, stat boosts, screens, Helping Hand)
+- `calculate_damage` - Calculate damage with full modifiers (items, abilities, tera, weather, terrain, stat boosts, screens, Helping Hand)
 - `analyze_matchup` - Analyze full matchup between two Pokemon (damage calcs for all moves both ways)
-- `check_ohko` - Check minimum Attack/SpA EVs needed to OHKO a target
-- `calc_damage_after_intimidate` - Compare damage before/after Intimidate
+- `calculate_damage_after_intimidate` - Compare damage before/after Intimidate
+
+### EV Optimizer
+- `suggest_ev_spread` - Generate optimized EV spread for multiple goals (survive, ohko, outspeed, underspeed, maximize)
+- `find_minimum_survival_evs` - Find minimum defensive EVs needed to survive a specific attack
+- `find_minimum_ohko_evs` - Find minimum offensive EVs needed to OHKO a specific target
+- `find_speed_evs` - Find Speed EVs needed to outspeed or underspeed a target
 
 ### Pokedex
 - `dex_pokemon` - Get Pokedex info (stats, types, abilities)
@@ -122,11 +125,11 @@ npx @modelcontextprotocol/inspector uv run smogon-vgc-mcp
 
 ### Admin/Data Refresh
 - `list_available_formats` - List all supported VGC formats
-- `refresh_data` - Fetch Smogon usage stats (accepts format parameter)
+- `refresh_usage_stats` - Fetch Smogon usage stats (accepts format parameter)
 - `refresh_moveset_data` - Fetch moveset data (tera types, checks/counters)
 - `refresh_pokepaste_data` - Fetch tournament teams from VGC Pastes Repository
 - `refresh_pokedex_data` - Fetch Pokedex data from Pokemon Showdown
-- `get_data_status` - Get usage data cache status (can filter by format)
+- `get_usage_stats_status` - Get usage data cache status (can filter by format)
 - `get_pokepaste_data_status` - Get team data cache status (can filter by format)
 - `get_pokedex_data_status` - Get Pokedex data cache status
 

@@ -1,5 +1,7 @@
 """Pokedex tools for MCP server."""
 
+from typing import Literal
+
 from mcp.server.fastmcp import FastMCP
 
 from smogon_vgc_mcp.database.queries import (
@@ -182,8 +184,10 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
         """Calculate type effectiveness (e.g., Fire vs Grass/Steel).
 
         Args:
-            attacking_type: The attacking move's type (e.g., "Fire")
-            defending_types: Comma-separated defending types (e.g., "Grass,Steel")
+            attacking_type: The attacking move's type, capitalized (e.g., "Fire", "Water")
+            defending_types: Defending Pokemon's types, comma-separated, no spaces.
+                Single type: "Grass"
+                Dual type: "Grass,Steel" (NOT "Grass, Steel")
 
         Returns:
             Type effectiveness multiplier and details
@@ -218,22 +222,23 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def search_dex(
         query: str,
-        category: str = "pokemon",
+        category: Literal["pokemon", "moves", "abilities", "items"] = "pokemon",
         limit: int = 10,
     ) -> dict:
         """Search the Pokedex by name.
 
         Args:
-            query: Search query (partial name match)
-            category: What to search: "pokemon", "moves", "abilities", or "items"
-            limit: Maximum results to return (default 10)
+            query: Search query - partial name match, case-insensitive
+                (e.g., "flutter", "incin", "moon")
+            category: What to search - "pokemon", "moves", "abilities", or "items"
+            limit: Maximum results (default 10, max 50)
 
         Returns:
-            List of matching entries
+            List of matching entries with basic info
         """
-        category = category.lower()
+        cat = category.lower()
 
-        if category == "pokemon":
+        if cat == "pokemon":
             results = await search_dex_pokemon(query, limit)
             return {
                 "query": query,
@@ -249,7 +254,7 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
                 ],
             }
 
-        elif category == "moves":
+        elif cat == "moves":
             results = await search_dex_moves(query, limit)
             return {
                 "query": query,
@@ -266,7 +271,7 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
                 ],
             }
 
-        elif category == "abilities":
+        elif cat == "abilities":
             results = await search_dex_abilities(query, limit)
             return {
                 "query": query,
@@ -281,7 +286,7 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
                 ],
             }
 
-        elif category == "items":
+        elif cat == "items":
             results = await search_dex_items(query, limit)
             return {
                 "query": query,
@@ -298,7 +303,7 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
 
         else:
             return make_error_response(
-                f"Unknown category '{category}'",
+                f"Unknown category '{cat}'",
                 valid_categories=["pokemon", "moves", "abilities", "items"],
             )
 
@@ -340,18 +345,18 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def dex_moves_by_type(
         move_type: str,
-        category: str | None = None,
+        category: Literal["Physical", "Special", "Status"] | None = None,
         limit: int = 20,
     ) -> dict:
         """Get moves of a specific type.
 
         Args:
-            move_type: Type to filter by (e.g., "Fairy", "Ghost")
-            category: Optional category filter ("Physical", "Special", "Status")
-            limit: Maximum results to return (default 20)
+            move_type: Type name, capitalized (e.g., "Fairy", "Ghost", "Fire")
+            category: Filter by move category - "Physical", "Special", or "Status"
+            limit: Maximum results (default 20)
 
         Returns:
-            List of moves with the specified type, ordered by base power
+            List of moves ordered by base power (highest first)
         """
         results = await get_moves_by_type(move_type, category, limit)
 

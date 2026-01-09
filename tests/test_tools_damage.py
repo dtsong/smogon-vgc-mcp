@@ -19,8 +19,8 @@ class MockFastMCP:
         return decorator
 
 
-class TestCalcDamage:
-    """Tests for calc_damage tool."""
+class TestCalculateDamage:
+    """Tests for calculate_damage tool."""
 
     @pytest.fixture
     def mock_mcp(self):
@@ -49,8 +49,8 @@ class TestCalcDamage:
             "move": "Close Combat",
         }
 
-        calc_damage = mock_mcp.tools["calc_damage"]
-        result = await calc_damage(
+        calculate_damage = mock_mcp.tools["calculate_damage"]
+        result = await calculate_damage(
             attacker="Urshifu",
             attacker_evs="0/252/0/0/4/252",
             attacker_nature="Jolly",
@@ -73,8 +73,8 @@ class TestCalcDamage:
             "error": "Invalid Pokemon name",
         }
 
-        calc_damage = mock_mcp.tools["calc_damage"]
-        result = await calc_damage(
+        calculate_damage = mock_mcp.tools["calculate_damage"]
+        result = await calculate_damage(
             attacker="NotAPokemon",
             attacker_evs="252/252/4/0/0/0",
             attacker_nature="Adamant",
@@ -99,8 +99,8 @@ class TestCalcDamage:
             "koChance": "2HKO",
         }
 
-        calc_damage = mock_mcp.tools["calc_damage"]
-        result = await calc_damage(
+        calculate_damage = mock_mcp.tools["calculate_damage"]
+        result = await calculate_damage(
             attacker="Urshifu",
             attacker_evs="252/252/4/0/0/0",
             attacker_nature="Adamant",
@@ -131,7 +131,7 @@ class TestAnalyzeMatchup:
         return mcp
 
     @pytest.mark.asyncio
-    @patch("smogon_vgc_mcp.tools.damage.calculate_damage")
+    @patch("smogon_vgc_mcp.tools.damage.calc_damage_internal")
     @patch("smogon_vgc_mcp.tools.damage.build_field_dict")
     @patch("smogon_vgc_mcp.tools.damage.build_pokemon_dict")
     async def test_returns_matchup_analysis(self, mock_build_poke, mock_build_field, mock_calc, mock_mcp):
@@ -163,7 +163,7 @@ class TestAnalyzeMatchup:
         assert "summary" in result
 
     @pytest.mark.asyncio
-    @patch("smogon_vgc_mcp.tools.damage.calculate_damage")
+    @patch("smogon_vgc_mcp.tools.damage.calc_damage_internal")
     @patch("smogon_vgc_mcp.tools.damage.build_field_dict")
     @patch("smogon_vgc_mcp.tools.damage.build_pokemon_dict")
     async def test_handles_empty_moves(self, mock_build_poke, mock_build_field, mock_calc, mock_mcp):
@@ -188,8 +188,8 @@ class TestAnalyzeMatchup:
         assert "pokemon1" in result
 
 
-class TestCheckOhko:
-    """Tests for check_ohko tool."""
+class TestCalculateDamageAfterIntimidate:
+    """Tests for calculate_damage_after_intimidate tool."""
 
     @pytest.fixture
     def mock_mcp(self):
@@ -201,87 +201,7 @@ class TestCheckOhko:
         return mcp
 
     @pytest.mark.asyncio
-    @patch("smogon_vgc_mcp.tools.damage.calculate_damage")
-    @patch("smogon_vgc_mcp.tools.damage.build_pokemon_dict")
-    @patch("smogon_vgc_mcp.tools.damage.build_field_dict")
-    async def test_finds_ohko_threshold(self, mock_field, mock_poke, mock_calc, mock_mcp):
-        """Test finding OHKO EV threshold."""
-        mock_field.return_value = {"gameType": "Doubles"}
-        mock_poke.return_value = {"name": "Test"}
-
-        # Simulate increasing damage with more EVs
-        def damage_by_evs(*args, **kwargs):
-            # Return increasing damage based on mock call count
-            ev_values = {
-                0: {"success": True, "minPercent": 70, "maxPercent": 85},
-                52: {"success": True, "minPercent": 80, "maxPercent": 95},
-                100: {"success": True, "minPercent": 90, "maxPercent": 105},
-                156: {"success": True, "minPercent": 100, "maxPercent": 115},
-                196: {"success": True, "minPercent": 105, "maxPercent": 120},
-                252: {"success": True, "minPercent": 110, "maxPercent": 130},
-            }
-            # Return some default for the test
-            return {"success": True, "minPercent": 85, "maxPercent": 100}
-
-        mock_calc.side_effect = damage_by_evs
-
-        check_ohko = mock_mcp.tools["check_ohko"]
-        result = await check_ohko(
-            attacker="Urshifu",
-            attacker_nature="Adamant",
-            defender="Incineroar",
-            defender_evs="252/4/0/0/252/0",
-            defender_nature="Careful",
-            move="Close Combat",
-        )
-
-        assert "attacker" in result
-        assert "defender" in result
-        assert "ev_investments" in result
-
-    @pytest.mark.asyncio
-    @patch("smogon_vgc_mcp.tools.damage.calculate_damage")
-    @patch("smogon_vgc_mcp.tools.damage.build_pokemon_dict")
-    @patch("smogon_vgc_mcp.tools.damage.build_field_dict")
-    async def test_reports_when_cannot_ohko(self, mock_field, mock_poke, mock_calc, mock_mcp):
-        """Test reporting when OHKO is impossible."""
-        mock_field.return_value = {"gameType": "Doubles"}
-        mock_poke.return_value = {"name": "Test"}
-
-        # Never reaches OHKO threshold
-        mock_calc.return_value = {
-            "success": True,
-            "minPercent": 40,
-            "maxPercent": 50,
-        }
-
-        check_ohko = mock_mcp.tools["check_ohko"]
-        result = await check_ohko(
-            attacker="Pikachu",
-            attacker_nature="Modest",
-            defender="Blissey",
-            defender_evs="252/4/252/0/0/0",
-            defender_nature="Bold",
-            move="Thunderbolt",
-        )
-
-        assert result["can_ohko_with_max_evs"] is False
-
-
-class TestCalcDamageAfterIntimidate:
-    """Tests for calc_damage_after_intimidate tool."""
-
-    @pytest.fixture
-    def mock_mcp(self):
-        """Create mock MCP and register tools."""
-        from smogon_vgc_mcp.tools.damage import register_damage_tools
-
-        mcp = MockFastMCP()
-        register_damage_tools(mcp)
-        return mcp
-
-    @pytest.mark.asyncio
-    @patch("smogon_vgc_mcp.tools.damage.calculate_damage")
+    @patch("smogon_vgc_mcp.tools.damage.calc_damage_internal")
     @patch("smogon_vgc_mcp.tools.damage.build_pokemon_dict")
     @patch("smogon_vgc_mcp.tools.damage.build_field_dict")
     async def test_compares_normal_vs_intimidated(self, mock_field, mock_poke, mock_calc, mock_mcp):
@@ -305,8 +225,8 @@ class TestCalcDamageAfterIntimidate:
             },
         ]
 
-        calc_damage_after_intimidate = mock_mcp.tools["calc_damage_after_intimidate"]
-        result = await calc_damage_after_intimidate(
+        calculate_damage_after_intimidate = mock_mcp.tools["calculate_damage_after_intimidate"]
+        result = await calculate_damage_after_intimidate(
             attacker="Urshifu",
             attacker_evs="0/252/0/0/4/252",
             attacker_nature="Jolly",
@@ -323,7 +243,7 @@ class TestCalcDamageAfterIntimidate:
         assert result["after_intimidate"]["ko_chance"] == "2HKO"
 
     @pytest.mark.asyncio
-    @patch("smogon_vgc_mcp.tools.damage.calculate_damage")
+    @patch("smogon_vgc_mcp.tools.damage.calc_damage_internal")
     @patch("smogon_vgc_mcp.tools.damage.build_pokemon_dict")
     @patch("smogon_vgc_mcp.tools.damage.build_field_dict")
     async def test_returns_error_on_failure(self, mock_field, mock_poke, mock_calc, mock_mcp):
@@ -332,8 +252,8 @@ class TestCalcDamageAfterIntimidate:
         mock_poke.return_value = {"name": "Test"}
         mock_calc.return_value = {"success": False, "error": "Invalid move"}
 
-        calc_damage_after_intimidate = mock_mcp.tools["calc_damage_after_intimidate"]
-        result = await calc_damage_after_intimidate(
+        calculate_damage_after_intimidate = mock_mcp.tools["calculate_damage_after_intimidate"]
+        result = await calculate_damage_after_intimidate(
             attacker="Urshifu",
             attacker_evs="252/252/4/0/0/0",
             attacker_nature="Adamant",
@@ -365,7 +285,7 @@ class TestDamageRangesInTools:
     @pytest.mark.asyncio
     @patch("smogon_vgc_mcp.tools.damage.calculate_damage_simple")
     async def test_damage_tool_returns_range(self, mock_calc, mock_mcp):
-        """Test that calc_damage returns min and max damage."""
+        """Test that calculate_damage returns min and max damage."""
         # Simulate real damage roll: min is ~85% of max
         mock_calc.return_value = {
             "success": True,
@@ -376,8 +296,8 @@ class TestDamageRangesInTools:
             "koChance": "75% chance to OHKO",
         }
 
-        calc_damage = mock_mcp.tools["calc_damage"]
-        result = await calc_damage(
+        calculate_damage = mock_mcp.tools["calculate_damage"]
+        result = await calculate_damage(
             attacker="Urshifu",
             attacker_evs="252/252/4/0/0/0",
             attacker_nature="Adamant",

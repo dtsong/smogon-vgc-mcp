@@ -91,7 +91,7 @@ def register_vgc_resources(mcp: FastMCP) -> None:
             return json.dumps(
                 {
                     "error": f"No data found for {month} at ELO {elo}",
-                    "hint": "Run refresh_data tool to fetch stats from Smogon",
+                    "hint": "Run refresh_usage_stats tool to fetch stats from Smogon",
                 }
             )
 
@@ -124,7 +124,7 @@ def register_vgc_resources(mcp: FastMCP) -> None:
             return json.dumps(
                 {
                     "status": "no_data",
-                    "message": "No data cached. Run refresh_data to fetch stats from Smogon.",
+                    "message": "No data cached. Run refresh_usage_stats to fetch stats.",
                     "snapshots": [],
                 }
             )

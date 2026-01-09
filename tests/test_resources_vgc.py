@@ -180,4 +180,4 @@ class TestStatusResource:
 
         data = json.loads(result)
         assert data["status"] == "no_data"
-        assert "Run refresh_data" in data["message"]
+        assert "refresh_usage_stats" in data["message"]

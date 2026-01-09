@@ -11,9 +11,8 @@ from smogon_vgc_mcp.calculator.stats import calculate_all_stats, format_stats
 from smogon_vgc_mcp.calculator.types import (
     analyze_team_types,
     get_offensive_coverage,
-    get_pokemon_weaknesses,
 )
-from smogon_vgc_mcp.data.pokemon_data import get_base_stats, get_pokemon_types
+from smogon_vgc_mcp.data.pokemon_data import get_base_stats
 from smogon_vgc_mcp.utils import make_error_response
 
 
@@ -32,9 +31,12 @@ def register_calculator_tools(mcp: FastMCP) -> None:
 
         Args:
             pokemon: Pokemon name (e.g., "Incineroar", "Flutter Mane")
-            evs: EV spread as "HP/Atk/Def/SpA/SpD/Spe" (e.g., "252/4/0/0/0/252")
-            nature: Nature name (e.g., "Adamant", "Timid")
-            ivs: IV spread (default 31/31/31/31/31/31)
+            evs: EV spread as "HP/Atk/Def/SpA/SpD/Spe" (e.g., "252/4/0/0/0/252").
+                Each stat: 0-252. Total must not exceed 510.
+            nature: Nature name (e.g., "Adamant" +Atk/-SpA, "Timid" +Spe/-Atk).
+                Use "Hardy" for neutral (no stat changes).
+            ivs: IV spread as "HP/Atk/Def/SpA/SpD/Spe". Each stat: 0-31.
+                Default 31/31/31/31/31/31 (perfect IVs).
             level: Pokemon level (default 50 for VGC)
 
         Returns:
@@ -109,51 +111,17 @@ def register_calculator_tools(mcp: FastMCP) -> None:
         return find_speed_benchmarks(pokemon, speed)
 
     @mcp.tool()
-    async def get_type_weaknesses(pokemon: str) -> dict:
-        """Get type weaknesses and resistances for a Pokemon.
-
-        Args:
-            pokemon: Pokemon name
-
-        Returns:
-            Detailed type matchup info (4x weak, 2x weak, resists, immunities)
-        """
-        return get_pokemon_weaknesses(pokemon)
-
-    @mcp.tool()
     async def analyze_team_type_coverage(pokemon_list: list[str]) -> dict:
         """Analyze type weaknesses and coverage for a team of Pokemon.
 
         Args:
-            pokemon_list: List of Pokemon names on the team
+            pokemon_list: List of 1-6 Pokemon names on the team
+                (e.g., ["Incineroar", "Flutter Mane", "Rillaboom", "Urshifu"])
 
         Returns:
             Team type analysis including shared weaknesses and unresisted types
         """
         return analyze_team_types(pokemon_list)
-
-    @mcp.tool()
-    async def get_pokemon_base_stats(pokemon: str) -> dict:
-        """Get base stats for a Pokemon.
-
-        Args:
-            pokemon: Pokemon name
-
-        Returns:
-            Base stats (HP, Atk, Def, SpA, SpD, Spe)
-        """
-        base = get_base_stats(pokemon)
-        if not base:
-            return make_error_response(f"Pokemon '{pokemon}' not found")
-
-        types = get_pokemon_types(pokemon)
-
-        return {
-            "pokemon": pokemon,
-            "types": types,
-            "base_stats": base,
-            "bst": sum(base.values()),
-        }
 
     @mcp.tool()
     async def analyze_move_coverage(move_types: list[str]) -> dict:

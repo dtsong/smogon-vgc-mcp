@@ -16,7 +16,7 @@ def register_admin_tools(mcp: FastMCP) -> None:
     """Register admin tools with the MCP server."""
 
     @mcp.tool()
-    async def refresh_data(
+    async def refresh_usage_stats(
         format: str = DEFAULT_FORMAT,
         month: str | None = None,
         elo: int | None = None,
@@ -47,7 +47,7 @@ def register_admin_tools(mcp: FastMCP) -> None:
         }
 
     @mcp.tool()
-    async def get_data_status(format: str | None = None) -> dict:
+    async def get_usage_stats_status(format: str | None = None) -> dict:
         """Get the current status of cached VGC data.
 
         Args:
@@ -62,7 +62,7 @@ def register_admin_tools(mcp: FastMCP) -> None:
             return {
                 "status": "no_data",
                 "format": format,
-                "message": "No data cached. Run refresh_data to fetch stats from Smogon.",
+                "message": "No data cached. Run refresh_usage_stats to fetch stats from Smogon.",
                 "snapshots": [],
             }
 
@@ -99,7 +99,7 @@ def register_admin_tools(mcp: FastMCP) -> None:
         This fetches the moveset text files and extracts Tera Type distributions
         and Checks/Counters data that isn't available in the chaos JSON.
 
-        IMPORTANT: Run refresh_data first to populate the base Pokemon usage data.
+        IMPORTANT: Run refresh_usage_stats first to populate the base Pokemon usage data.
         This tool augments that data with additional information.
 
         Args:

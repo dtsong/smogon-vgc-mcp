@@ -5,8 +5,10 @@ from mcp.server.fastmcp import FastMCP
 from smogon_vgc_mcp.calculator.damage import (
     build_field_dict,
     build_pokemon_dict,
-    calculate_damage,
     calculate_damage_simple,
+)
+from smogon_vgc_mcp.calculator.damage import (
+    calculate_damage as calc_damage_internal,
 )
 from smogon_vgc_mcp.utils import make_error_response
 
@@ -15,7 +17,7 @@ def register_damage_tools(mcp: FastMCP) -> None:
     """Register damage calculation tools with the MCP server."""
 
     @mcp.tool()
-    async def calc_damage(
+    async def calculate_damage(
         attacker: str,
         attacker_evs: str,
         attacker_nature: str,
@@ -166,7 +168,7 @@ def register_damage_tools(mcp: FastMCP) -> None:
         p1_attacks = []
         for move in pokemon1_moves[:4]:
             if move:
-                result = calculate_damage(p1, p2, move, field)
+                result = calc_damage_internal(p1, p2, move, field)
                 if result.get("success"):
                     p1_attacks.append(
                         {
@@ -180,7 +182,7 @@ def register_damage_tools(mcp: FastMCP) -> None:
         p2_attacks = []
         for move in pokemon2_moves[:4]:
             if move:
-                result = calculate_damage(p2, p1, move, field)
+                result = calc_damage_internal(p2, p1, move, field)
                 if result.get("success"):
                     p2_attacks.append(
                         {
@@ -210,104 +212,7 @@ def register_damage_tools(mcp: FastMCP) -> None:
         }
 
     @mcp.tool()
-    async def check_ohko(
-        attacker: str,
-        attacker_nature: str,
-        defender: str,
-        defender_evs: str,
-        defender_nature: str,
-        move: str,
-        attacker_item: str | None = None,
-        attacker_ability: str | None = None,
-        defender_ability: str | None = None,
-    ) -> dict:
-        """Check minimum Attack/SpA EVs needed to OHKO a target.
-
-        Args:
-            attacker: Attacking Pokemon name
-            attacker_nature: Attacker's nature
-            defender: Defending Pokemon name
-            defender_evs: Defender's EV spread
-            defender_nature: Defender's nature
-            move: Move name
-            attacker_item: Attacker's item
-            attacker_ability: Attacker's ability
-            defender_ability: Defender's ability
-
-        Returns:
-            EV investment needed to guarantee OHKO, or if impossible
-        """
-        field = build_field_dict(game_type="Doubles")
-
-        defender_pokemon = build_pokemon_dict(
-            name=defender,
-            evs=defender_evs,
-            nature=defender_nature,
-            ability=defender_ability,
-        )
-
-        # Test different EV investments
-        ev_levels = [0, 52, 100, 156, 196, 252]
-        results = []
-
-        for ev in ev_levels:
-            # Determine if physical or special based on first calc
-            for stat_type in ["atk", "spa"]:
-                if stat_type == "atk":
-                    evs = f"0/{ev}/0/0/0/0"
-                else:
-                    evs = f"0/0/0/{ev}/0/0"
-
-                attacker_pokemon = build_pokemon_dict(
-                    name=attacker,
-                    evs=evs,
-                    nature=attacker_nature,
-                    item=attacker_item,
-                    ability=attacker_ability,
-                )
-
-                result = calculate_damage(attacker_pokemon, defender_pokemon, move, field)
-
-                if result.get("success"):
-                    max_percent = result.get("maxPercent", 0)
-                    min_percent = result.get("minPercent", 0)
-
-                    results.append(
-                        {
-                            "evs": ev,
-                            "stat": stat_type.upper(),
-                            "min_percent": min_percent,
-                            "max_percent": max_percent,
-                            "guaranteed_ohko": min_percent >= 100,
-                            "possible_ohko": max_percent >= 100,
-                        }
-                    )
-
-                    # Only check one stat type once we know which one works
-                    if max_percent > 0:
-                        break
-
-        # Filter to the stat type that actually does damage
-        if results:
-            stat_type = results[0]["stat"]
-            results = [r for r in results if r["stat"] == stat_type]
-
-        # Find minimum EVs for guaranteed OHKO
-        guaranteed = [r for r in results if r["guaranteed_ohko"]]
-        possible = [r for r in results if r["possible_ohko"]]
-
-        return {
-            "attacker": attacker,
-            "defender": defender,
-            "move": move,
-            "ev_investments": results,
-            "minimum_guaranteed_ohko": guaranteed[0]["evs"] if guaranteed else None,
-            "minimum_possible_ohko": possible[0]["evs"] if possible else None,
-            "can_ohko_with_max_evs": any(r["guaranteed_ohko"] for r in results),
-        }
-
-    @mcp.tool()
-    async def calc_damage_after_intimidate(
+    async def calculate_damage_after_intimidate(
         attacker: str,
         attacker_evs: str,
         attacker_nature: str,
@@ -362,10 +267,12 @@ def register_damage_tools(mcp: FastMCP) -> None:
         )
 
         # Calculate normal damage
-        normal_result = calculate_damage(attacker_pokemon, defender_pokemon, move, field)
+        normal_result = calc_damage_internal(attacker_pokemon, defender_pokemon, move, field)
 
         # Calculate after Intimidate
-        intimidated_result = calculate_damage(attacker_intimidated, defender_pokemon, move, field)
+        intimidated_result = calc_damage_internal(
+            attacker_intimidated, defender_pokemon, move, field
+        )
 
         if not normal_result.get("success") or not intimidated_result.get("success"):
             return make_error_response("Calculation failed")

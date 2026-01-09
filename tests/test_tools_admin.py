@@ -19,8 +19,8 @@ class MockFastMCP:
         return decorator
 
 
-class TestRefreshData:
-    """Tests for refresh_data tool."""
+class TestRefreshUsageStats:
+    """Tests for refresh_usage_stats tool."""
 
     @pytest.fixture
     def mock_mcp(self):
@@ -41,8 +41,8 @@ class TestRefreshData:
             "total_pokemon": 100,
         }
 
-        refresh_data = mock_mcp.tools["refresh_data"]
-        result = await refresh_data()
+        refresh_usage_stats = mock_mcp.tools["refresh_usage_stats"]
+        result = await refresh_usage_stats()
 
         assert result["status"] == "completed"
         assert result["successful_fetches"] == 1
@@ -58,15 +58,15 @@ class TestRefreshData:
             "total_pokemon": 0,
         }
 
-        refresh_data = mock_mcp.tools["refresh_data"]
-        result = await refresh_data()
+        refresh_usage_stats = mock_mcp.tools["refresh_usage_stats"]
+        result = await refresh_usage_stats()
 
         assert result["failed_fetches"] == 1
         assert result["errors"] is not None
 
 
-class TestGetDataStatus:
-    """Tests for get_data_status tool."""
+class TestGetUsageStatsStatus:
+    """Tests for get_usage_stats_status tool."""
 
     @pytest.fixture
     def mock_mcp(self):
@@ -90,8 +90,8 @@ class TestGetDataStatus:
 
         mock_get_snapshots.return_value = [mock_snapshot]
 
-        get_data_status = mock_mcp.tools["get_data_status"]
-        result = await get_data_status()
+        get_usage_stats_status = mock_mcp.tools["get_usage_stats_status"]
+        result = await get_usage_stats_status()
 
         assert result["status"] == "ready"
         assert result["total_snapshots"] == 1
@@ -103,11 +103,11 @@ class TestGetDataStatus:
         """Test returning no_data when empty."""
         mock_get_snapshots.return_value = []
 
-        get_data_status = mock_mcp.tools["get_data_status"]
-        result = await get_data_status()
+        get_usage_stats_status = mock_mcp.tools["get_usage_stats_status"]
+        result = await get_usage_stats_status()
 
         assert result["status"] == "no_data"
-        assert "Run refresh_data" in result["message"]
+        assert "Run refresh_usage_stats" in result["message"]
 
 
 class TestRefreshMovesetData:

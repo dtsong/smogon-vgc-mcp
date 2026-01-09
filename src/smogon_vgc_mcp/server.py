@@ -7,6 +7,7 @@ from smogon_vgc_mcp.tools import (
     register_admin_tools,
     register_calculator_tools,
     register_damage_tools,
+    register_ev_generator_tools,
     register_pokedex_tools,
     register_pokemon_tools,
     register_rankings_tools,
@@ -35,6 +36,7 @@ def create_server() -> FastMCP:
     register_team_tools(mcp)
     register_calculator_tools(mcp)
     register_damage_tools(mcp)
+    register_ev_generator_tools(mcp)
     register_pokedex_tools(mcp)
     register_admin_tools(mcp)
 

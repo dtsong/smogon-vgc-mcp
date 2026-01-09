@@ -68,12 +68,14 @@ def register_team_tools(mcp: FastMCP) -> None:
     ) -> dict:
         """Search tournament teams by Pokemon, tournament name, or owner.
 
+        At least one of pokemon, tournament, or owner must be provided.
+
         Args:
-            pokemon: Pokemon name to search for (partial match)
-            tournament: Tournament name to filter by (partial match)
-            owner: Team owner/player name (partial match)
-            format: VGC format code to filter by (e.g., "regf")
-            limit: Maximum number of teams to return (default 10)
+            pokemon: Pokemon name, partial match (e.g., "Incin" matches "Incineroar")
+            tournament: Tournament name, partial match (e.g., "Worlds", "Regional")
+            owner: Team owner/player name, partial match (e.g., "Wolfe")
+            format: VGC format code to filter by (e.g., "regf"). Optional.
+            limit: Maximum teams to return (default 10, max 50)
 
         Returns:
             List of matching teams with Pokemon summaries
