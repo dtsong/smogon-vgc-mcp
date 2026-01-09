@@ -23,7 +23,7 @@ MCP server providing VGC competitive Pokemon stats, damage calculations, and tea
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/smogon-vgc-mcp.git
+git clone https://github.com/dtsong/smogon-vgc-mcp.git
 cd smogon-vgc-mcp
 
 # Install dependencies
@@ -36,7 +36,7 @@ npm install
 ### Option 2: Install with uvx (No Clone Required)
 
 ```bash
-uvx --from git+https://github.com/yourusername/smogon-vgc-mcp smogon-vgc-mcp
+uvx --from git+https://github.com/dtsong/smogon-vgc-mcp smogon-vgc-mcp
 ```
 
 ## Claude Code Configuration
@@ -80,7 +80,7 @@ Replace `/path/to/smogon-vgc-mcp` with the actual path where you cloned the repo
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/yourusername/smogon-vgc-mcp",
+        "git+https://github.com/dtsong/smogon-vgc-mcp",
         "smogon-vgc-mcp"
       ]
     }
