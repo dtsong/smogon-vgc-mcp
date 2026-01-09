@@ -20,7 +20,7 @@ class AgentConfig:
     name: str
     system_prompt: str
     tools: list[str]
-    model: str = "claude-sonnet-4-20250514"
+    model: str = "claude-opus-4-5-20251101"
     max_tokens: int = 4096
     max_tool_calls: int = 20
 
