@@ -1,11 +1,14 @@
 """Damage calculation via @smogon/calc subprocess."""
 
 import json
+import logging
 import subprocess
 from pathlib import Path
 from typing import Any
 
 from smogon_vgc_mcp.utils import parse_ev_string, parse_iv_string
+
+logger = logging.getLogger(__name__)
 
 # Path to the Node.js wrapper script
 CALC_WRAPPER_PATH = Path(__file__).parent.parent.parent.parent / "calc" / "calc_wrapper.js"
@@ -137,16 +140,20 @@ def run_calc(input_data: dict[str, Any]) -> dict[str, Any]:
         return json.loads(result.stdout)
 
     except subprocess.TimeoutExpired:
+        logger.warning("Damage calculation timed out")
         return {"success": False, "error": "Calculation timed out"}
     except json.JSONDecodeError as e:
+        logger.error("Failed to parse calc output: %s", e)
         return {"success": False, "error": f"Failed to parse calc output: {e}"}
     except FileNotFoundError:
+        logger.error("Node.js not found - calc_wrapper.js requires Node.js")
         return {
             "success": False,
             "error": "Node.js not found. Install Node.js and run 'npm install'.",
         }
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        logger.exception("Unexpected error in damage calculation")
+        return {"success": False, "error": f"Unexpected error ({type(e).__name__}): {e}"}
 
 
 def calculate_damage(

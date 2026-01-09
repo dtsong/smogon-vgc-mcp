@@ -1,5 +1,6 @@
 """Fetch and parse Smogon moveset text files for Tera Types and Checks/Counters."""
 
+import logging
 import re
 from pathlib import Path
 
@@ -8,6 +9,8 @@ import aiosqlite
 from smogon_vgc_mcp.database.schema import get_connection, get_db_path, init_database
 from smogon_vgc_mcp.formats import DEFAULT_FORMAT, get_format, get_moveset_url
 from smogon_vgc_mcp.utils import fetch_text
+
+logger = logging.getLogger(__name__)
 
 
 async def fetch_moveset_text(format_code: str, month: str, elo: int) -> str | None:
@@ -191,7 +194,12 @@ async def store_moveset_data(
     ) as cursor:
         row = await cursor.fetchone()
         if not row:
-            print(f"No snapshot found for {format_code} {month} ELO {elo} - run refresh_data first")
+            logger.warning(
+                "No snapshot found for %s %s ELO %s - run refresh_data first",
+                format_code,
+                month,
+                elo,
+            )
             return 0
         snapshot_id = row[0]
 
@@ -327,16 +335,28 @@ async def fetch_and_store_moveset_all(
 
     for month in months:
         for elo in elos:
-            print(f"Fetching moveset data for {fmt.name} {month} ELO {elo}...")
+            logger.info("Fetching moveset data for %s %s ELO %s", fmt.name, month, elo)
             result = await fetch_and_store_moveset(format_code, month, elo, db_path)
 
             if result["success"]:
                 success.append(result)
                 total_pokemon += result["pokemon_updated"]
-                print(f"  Updated {result['pokemon_updated']} Pokemon")
+                logger.info(
+                    "Updated %d Pokemon for %s %s ELO %s",
+                    result["pokemon_updated"],
+                    fmt.name,
+                    month,
+                    elo,
+                )
             else:
                 failed.append(result)
-                print(f"  Failed: {result.get('error', 'unknown')}")
+                logger.error(
+                    "Failed to fetch moveset for %s %s ELO %s: %s",
+                    fmt.name,
+                    month,
+                    elo,
+                    result.get("error", "unknown"),
+                )
 
     return {
         "success": success,

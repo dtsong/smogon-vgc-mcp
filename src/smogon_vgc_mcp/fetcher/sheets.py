@@ -3,6 +3,7 @@
 import asyncio
 import csv
 import io
+import logging
 import re
 
 import aiosqlite
@@ -11,6 +12,8 @@ from smogon_vgc_mcp.database.schema import get_connection, get_db_path, init_dat
 from smogon_vgc_mcp.fetcher.pokepaste import fetch_pokepaste, parse_pokepaste
 from smogon_vgc_mcp.formats import DEFAULT_FORMAT, get_format, get_sheet_csv_url
 from smogon_vgc_mcp.utils import fetch_text
+
+logger = logging.getLogger(__name__)
 
 
 async def fetch_teams_from_sheet(format_code: str) -> list[dict]:
@@ -26,12 +29,12 @@ async def fetch_teams_from_sheet(format_code: str) -> list[dict]:
     sheet_url = get_sheet_csv_url(format_code)
 
     if not sheet_url:
-        print(f"No Google Sheet configured for {fmt.name}")
+        logger.warning("No Google Sheet configured for %s", fmt.name)
         return []
 
     csv_text = await fetch_text(sheet_url)
     if not csv_text:
-        print(f"Failed to fetch sheet for {fmt.name}")
+        logger.error("Failed to fetch sheet for %s", fmt.name)
         return []
 
     # Parse CSV as raw rows (no header inference - the sheet has complex multi-row headers)
@@ -191,9 +194,9 @@ async def fetch_and_store_pokepaste_teams(
     db_path = get_db_path()
     await init_database(db_path)
 
-    print(f"Fetching team list from Google Sheet for {fmt.name}...")
+    logger.info("Fetching team list from Google Sheet for %s", fmt.name)
     teams = await fetch_teams_from_sheet(format_code)
-    print(f"Found {len(teams)} teams")
+    logger.info("Found %d teams for %s", len(teams), fmt.name)
 
     if max_teams:
         teams = teams[:max_teams]
@@ -218,7 +221,7 @@ async def fetch_and_store_pokepaste_teams(
                 await db.commit()
                 continue
 
-            print(f"Processing {team_id} ({i + 1}/{len(teams)})...")
+            logger.info("Processing %s (%d/%d)", team_id, i + 1, len(teams))
 
             # Fetch and parse pokepaste
             paste_text = await fetch_pokepaste(pokepaste_url)
@@ -231,10 +234,10 @@ async def fetch_and_store_pokepaste_teams(
                         "pokemon_count": len(pokemon_list),
                     }
                 )
-                print(f"  Stored {len(pokemon_list)} Pokemon")
+                logger.info("Stored %d Pokemon for team %s", len(pokemon_list), team_id)
             else:
                 failed.append({"team_id": team_id, "url": pokepaste_url})
-                print("  Failed to fetch pokepaste")
+                logger.error("Failed to fetch pokepaste for team %s: %s", team_id, pokepaste_url)
 
             await db.commit()
 

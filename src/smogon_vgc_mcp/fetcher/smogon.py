@@ -1,6 +1,7 @@
 """Fetch and parse Smogon VGC stats."""
 
 import json
+import logging
 import re
 from pathlib import Path
 
@@ -9,6 +10,8 @@ import aiosqlite
 from smogon_vgc_mcp.database.schema import get_connection, get_db_path, init_database
 from smogon_vgc_mcp.formats import DEFAULT_FORMAT, get_format, get_smogon_stats_url
 from smogon_vgc_mcp.utils import fetch_json
+
+logger = logging.getLogger(__name__)
 
 
 async def fetch_vgc_data(format_code: str, month: str, elo: int) -> dict | None:
@@ -52,129 +55,141 @@ async def store_snapshot_data(
     """Store fetched data into the database.
 
     Returns the snapshot ID.
+
+    Raises:
+        RuntimeError: If snapshot or Pokemon usage record not found after insert.
+        Exception: Re-raises any database error after rollback.
     """
-    info = data.get("info", {})
-    pokemon_data = data.get("data", {})
+    try:
+        info = data.get("info", {})
+        pokemon_data = data.get("data", {})
 
-    num_battles = info.get("number of battles", 0)
+        num_battles = info.get("number of battles", 0)
 
-    # Insert or replace snapshot
-    await db.execute(
-        """INSERT OR REPLACE INTO snapshots (format, month, elo_bracket, num_battles, fetched_at)
-           VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)""",
-        (format_code, month, elo, num_battles),
-    )
-    await db.commit()
-
-    # Get snapshot ID
-    async with db.execute(
-        "SELECT id FROM snapshots WHERE format = ? AND month = ? AND elo_bracket = ?",
-        (format_code, month, elo),
-    ) as cursor:
-        row = await cursor.fetchone()
-        if row is None:
-            raise RuntimeError(f"Snapshot not found for {month} {elo}")
-        snapshot_id = row[0]
-
-    # Clear existing data for this snapshot
-    await db.execute(
-        "DELETE FROM pokemon_usage WHERE snapshot_id = ?",
-        (snapshot_id,),
-    )
-
-    # Insert Pokemon data
-    for pokemon_name, pokemon_stats in pokemon_data.items():
-        raw_count = pokemon_stats.get("Raw count", 0)
-        viability = json.dumps(pokemon_stats.get("Viability Ceiling", []))
-
+        # Insert or replace snapshot
         await db.execute(
-            """INSERT INTO pokemon_usage
-               (snapshot_id, pokemon, raw_count, usage_percent, viability_ceiling)
-               VALUES (?, ?, ?, ?, ?)""",
-            (
-                snapshot_id,
-                pokemon_name,
-                raw_count,
-                (raw_count / (num_battles * 2) * 100) if num_battles > 0 else 0,
-                viability,
-            ),
+            """INSERT OR REPLACE INTO snapshots (format, month, elo_bracket, num_battles, fetched_at)
+               VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+            (format_code, month, elo, num_battles),
         )
+        await db.commit()
 
-        # Get pokemon_usage_id
+        # Get snapshot ID
         async with db.execute(
-            "SELECT id FROM pokemon_usage WHERE snapshot_id = ? AND pokemon = ?",
-            (snapshot_id, pokemon_name),
+            "SELECT id FROM snapshots WHERE format = ? AND month = ? AND elo_bracket = ?",
+            (format_code, month, elo),
         ) as cursor:
             row = await cursor.fetchone()
             if row is None:
-                raise RuntimeError(f"Pokemon usage not found for {pokemon_name}")
-            pokemon_usage_id = row[0]
+                logger.error("Snapshot not found after insert: %s/%s/%s", format_code, month, elo)
+                raise RuntimeError(f"Snapshot not found for {month} {elo}")
+            snapshot_id = row[0]
 
-        # Insert abilities
-        abilities = pokemon_stats.get("Abilities", {})
-        total_abilities = sum(abilities.values()) if abilities else 1
-        for ability, count in abilities.items():
+        # Clear existing data for this snapshot
+        await db.execute(
+            "DELETE FROM pokemon_usage WHERE snapshot_id = ?",
+            (snapshot_id,),
+        )
+
+        # Insert Pokemon data
+        for pokemon_name, pokemon_stats in pokemon_data.items():
+            raw_count = pokemon_stats.get("Raw count", 0)
+            viability = json.dumps(pokemon_stats.get("Viability Ceiling", []))
+
             await db.execute(
-                """INSERT INTO abilities (pokemon_usage_id, ability, count, percent)
-                   VALUES (?, ?, ?, ?)""",
-                (pokemon_usage_id, ability, count, (count / total_abilities * 100)),
+                """INSERT INTO pokemon_usage
+                   (snapshot_id, pokemon, raw_count, usage_percent, viability_ceiling)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (
+                    snapshot_id,
+                    pokemon_name,
+                    raw_count,
+                    (raw_count / (num_battles * 2) * 100) if num_battles > 0 else 0,
+                    viability,
+                ),
             )
 
-        # Insert items
-        items = pokemon_stats.get("Items", {})
-        total_items = sum(items.values()) if items else 1
-        for item, count in items.items():
-            await db.execute(
-                "INSERT INTO items (pokemon_usage_id, item, count, percent) VALUES (?, ?, ?, ?)",
-                (pokemon_usage_id, item, count, (count / total_items * 100)),
-            )
+            # Get pokemon_usage_id
+            async with db.execute(
+                "SELECT id FROM pokemon_usage WHERE snapshot_id = ? AND pokemon = ?",
+                (snapshot_id, pokemon_name),
+            ) as cursor:
+                row = await cursor.fetchone()
+                if row is None:
+                    logger.error("Pokemon usage not found after insert: %s", pokemon_name)
+                    raise RuntimeError(f"Pokemon usage not found for {pokemon_name}")
+                pokemon_usage_id = row[0]
 
-        # Insert moves
-        moves = pokemon_stats.get("Moves", {})
-        total_moves = sum(moves.values()) if moves else 1
-        for move, count in moves.items():
-            await db.execute(
-                "INSERT INTO moves (pokemon_usage_id, move, count, percent) VALUES (?, ?, ?, ?)",
-                (pokemon_usage_id, move, count, (count / total_moves * 100)),
-            )
-
-        # Insert teammates
-        teammates = pokemon_stats.get("Teammates", {})
-        total_teammates = sum(teammates.values()) if teammates else 1
-        for teammate, count in teammates.items():
-            await db.execute(
-                """INSERT INTO teammates (pokemon_usage_id, teammate, count, percent)
-                   VALUES (?, ?, ?, ?)""",
-                (pokemon_usage_id, teammate, count, (count / total_teammates * 100)),
-            )
-
-        # Insert spreads (top 50 only to save space)
-        spreads = pokemon_stats.get("Spreads", {})
-        total_spreads = sum(spreads.values()) if spreads else 1
-        sorted_spreads = sorted(spreads.items(), key=lambda x: x[1], reverse=True)[:50]
-        for spread_str, count in sorted_spreads:
-            parsed = parse_spread(spread_str)
-            if parsed:
+            # Insert abilities
+            abilities = pokemon_stats.get("Abilities", {})
+            total_abilities = sum(abilities.values()) if abilities else 1
+            for ability, count in abilities.items():
                 await db.execute(
-                    """INSERT INTO spreads
-                       (pokemon_usage_id, nature, hp, atk, def, spa, spd, spe, count, percent)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        pokemon_usage_id,
-                        parsed["nature"],
-                        parsed["hp"],
-                        parsed["atk"],
-                        parsed["def"],
-                        parsed["spa"],
-                        parsed["spd"],
-                        parsed["spe"],
-                        count,
-                        (count / total_spreads * 100),
-                    ),
+                    """INSERT INTO abilities (pokemon_usage_id, ability, count, percent)
+                       VALUES (?, ?, ?, ?)""",
+                    (pokemon_usage_id, ability, count, (count / total_abilities * 100)),
                 )
 
-    await db.commit()
-    return snapshot_id
+            # Insert items
+            items = pokemon_stats.get("Items", {})
+            total_items = sum(items.values()) if items else 1
+            for item, count in items.items():
+                await db.execute(
+                    "INSERT INTO items (pokemon_usage_id, item, count, percent) VALUES (?, ?, ?, ?)",
+                    (pokemon_usage_id, item, count, (count / total_items * 100)),
+                )
+
+            # Insert moves
+            moves = pokemon_stats.get("Moves", {})
+            total_moves = sum(moves.values()) if moves else 1
+            for move, count in moves.items():
+                await db.execute(
+                    "INSERT INTO moves (pokemon_usage_id, move, count, percent) VALUES (?, ?, ?, ?)",
+                    (pokemon_usage_id, move, count, (count / total_moves * 100)),
+                )
+
+            # Insert teammates
+            teammates = pokemon_stats.get("Teammates", {})
+            total_teammates = sum(teammates.values()) if teammates else 1
+            for teammate, count in teammates.items():
+                await db.execute(
+                    """INSERT INTO teammates (pokemon_usage_id, teammate, count, percent)
+                       VALUES (?, ?, ?, ?)""",
+                    (pokemon_usage_id, teammate, count, (count / total_teammates * 100)),
+                )
+
+            # Insert spreads (top 50 only to save space)
+            spreads = pokemon_stats.get("Spreads", {})
+            total_spreads = sum(spreads.values()) if spreads else 1
+            sorted_spreads = sorted(spreads.items(), key=lambda x: x[1], reverse=True)[:50]
+            for spread_str, count in sorted_spreads:
+                parsed = parse_spread(spread_str)
+                if parsed:
+                    await db.execute(
+                        """INSERT INTO spreads
+                           (pokemon_usage_id, nature, hp, atk, def, spa, spd, spe, count, percent)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (
+                            pokemon_usage_id,
+                            parsed["nature"],
+                            parsed["hp"],
+                            parsed["atk"],
+                            parsed["def"],
+                            parsed["spa"],
+                            parsed["spd"],
+                            parsed["spe"],
+                            count,
+                            (count / total_spreads * 100),
+                        ),
+                    )
+
+        await db.commit()
+        return snapshot_id
+
+    except Exception:
+        await db.rollback()
+        logger.exception("Failed to store snapshot data for %s/%s/%s", format_code, month, elo)
+        raise
 
 
 async def fetch_and_store_all(
@@ -213,7 +228,7 @@ async def fetch_and_store_all(
     async with get_connection(db_path) as db:
         for month in months:
             for elo in elos:
-                print(f"Fetching {fmt.name} {month} ELO {elo}...")
+                logger.info("Fetching %s %s ELO %s", fmt.name, month, elo)
                 data = await fetch_vgc_data(format_code, month, elo)
 
                 if data:
@@ -227,10 +242,12 @@ async def fetch_and_store_all(
                         }
                     )
                     total_pokemon += pokemon_count
-                    print(f"  Stored {pokemon_count} Pokemon")
+                    logger.info(
+                        "Stored %d Pokemon for %s %s ELO %s", pokemon_count, fmt.name, month, elo
+                    )
                 else:
                     failed.append({"month": month, "elo": elo})
-                    print("  Failed to fetch")
+                    logger.error("Failed to fetch %s %s ELO %s", fmt.name, month, elo)
 
     return {
         "success": success,

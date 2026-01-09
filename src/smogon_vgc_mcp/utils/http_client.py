@@ -8,7 +8,11 @@ This module consolidates HTTP fetching patterns from:
 - fetcher/pokepaste.py
 """
 
+import logging
+
 import httpx
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 60.0
 
@@ -29,7 +33,7 @@ async def fetch_json(url: str, timeout: float = DEFAULT_TIMEOUT) -> dict | None:
             response.raise_for_status()
             return response.json()
         except httpx.HTTPError as e:
-            print(f"Failed to fetch {url}: {e}")
+            logger.error("Failed to fetch JSON from %s: %s", url, e)
             return None
 
 
@@ -54,5 +58,5 @@ async def fetch_text(
             response.raise_for_status()
             return response.text
         except httpx.HTTPError as e:
-            print(f"Failed to fetch {url}: {e}")
+            logger.error("Failed to fetch text from %s: %s", url, e)
             return None
