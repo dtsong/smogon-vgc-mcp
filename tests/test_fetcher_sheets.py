@@ -91,10 +91,10 @@ class TestRentalCodeExtraction:
         """Test rejecting invalid rental codes."""
         invalid_codes = [
             "abc123",  # Lowercase
-            "ABC12",   # Too short
-            "ABC1234", # Too long
-            "ABC-123", # Contains dash
-            "",        # Empty
+            "ABC12",  # Too short
+            "ABC1234",  # Too long
+            "ABC-123",  # Contains dash
+            "",  # Empty
         ]
 
         for code in invalid_codes:

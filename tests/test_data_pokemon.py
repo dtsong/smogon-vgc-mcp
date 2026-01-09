@@ -50,10 +50,31 @@ class TestGetBaseStats:
     """Tests for get_base_stats function."""
 
     @patch("smogon_vgc_mcp.data.pokemon_data._base_stats", None)
-    @patch("builtins.open", mock_open(read_data=json.dumps({
-        "incineroar": {"hp": 95, "atk": 115, "def": 90, "spa": 80, "spd": 90, "spe": 60},
-        "fluttermane": {"hp": 55, "atk": 55, "def": 55, "spa": 135, "spd": 135, "spe": 135},
-    })))
+    @patch(
+        "builtins.open",
+        mock_open(
+            read_data=json.dumps(
+                {
+                    "incineroar": {
+                        "hp": 95,
+                        "atk": 115,
+                        "def": 90,
+                        "spa": 80,
+                        "spd": 90,
+                        "spe": 60,
+                    },
+                    "fluttermane": {
+                        "hp": 55,
+                        "atk": 55,
+                        "def": 55,
+                        "spa": 135,
+                        "spd": 135,
+                        "spe": 135,
+                    },
+                }
+            )
+        ),
+    )
     def test_get_existing_pokemon(self):
         """Test getting stats for existing Pokemon."""
         result = get_base_stats("Incineroar")
@@ -64,15 +85,32 @@ class TestGetBaseStats:
         assert result["spe"] == 60
 
     @patch("smogon_vgc_mcp.data.pokemon_data._base_stats", None)
-    @patch("builtins.open", mock_open(read_data=json.dumps({
-        "incineroar": {"hp": 95, "atk": 115, "def": 90, "spa": 80, "spd": 90, "spe": 60},
-    })))
+    @patch(
+        "builtins.open",
+        mock_open(
+            read_data=json.dumps(
+                {
+                    "incineroar": {
+                        "hp": 95,
+                        "atk": 115,
+                        "def": 90,
+                        "spa": 80,
+                        "spd": 90,
+                        "spe": 60,
+                    },
+                }
+            )
+        ),
+    )
     def test_case_insensitive(self):
         """Test case-insensitive lookup."""
         result1 = get_base_stats("Incineroar")
         # Reset cache for second test
         import smogon_vgc_mcp.data.pokemon_data as module
-        module._base_stats = {"incineroar": {"hp": 95, "atk": 115, "def": 90, "spa": 80, "spd": 90, "spe": 60}}
+
+        module._base_stats = {
+            "incineroar": {"hp": 95, "atk": 115, "def": 90, "spa": 80, "spd": 90, "spe": 60}
+        }
         result2 = get_base_stats("INCINEROAR")
         result3 = get_base_stats("incineroar")
 
@@ -84,9 +122,10 @@ class TestGetBaseStats:
         result = get_base_stats("NotAPokemon")
         assert result is None
 
-    @patch("smogon_vgc_mcp.data.pokemon_data._base_stats", {
-        "fluttermane": {"hp": 55, "atk": 55, "def": 55, "spa": 135, "spd": 135, "spe": 135}
-    })
+    @patch(
+        "smogon_vgc_mcp.data.pokemon_data._base_stats",
+        {"fluttermane": {"hp": 55, "atk": 55, "def": 55, "spa": 135, "spd": 135, "spe": 135}},
+    )
     def test_normalized_name_lookup(self):
         """Test Pokemon with spaces are normalized."""
         result = get_base_stats("Flutter Mane")
@@ -97,19 +136,25 @@ class TestGetBaseStats:
 class TestGetPokemonTypes:
     """Tests for get_pokemon_types function."""
 
-    @patch("smogon_vgc_mcp.data.pokemon_data._types", {
-        "incineroar": ["Fire", "Dark"],
-        "fluttermane": ["Ghost", "Fairy"],
-    })
+    @patch(
+        "smogon_vgc_mcp.data.pokemon_data._types",
+        {
+            "incineroar": ["Fire", "Dark"],
+            "fluttermane": ["Ghost", "Fairy"],
+        },
+    )
     def test_dual_type_pokemon(self):
         """Test getting types for dual-type Pokemon."""
         result = get_pokemon_types("Incineroar")
 
         assert result == ["Fire", "Dark"]
 
-    @patch("smogon_vgc_mcp.data.pokemon_data._types", {
-        "pikachu": ["Electric"],
-    })
+    @patch(
+        "smogon_vgc_mcp.data.pokemon_data._types",
+        {
+            "pikachu": ["Electric"],
+        },
+    )
     def test_single_type_pokemon(self):
         """Test getting types for single-type Pokemon."""
         result = get_pokemon_types("Pikachu")
@@ -122,9 +167,7 @@ class TestGetPokemonTypes:
         result = get_pokemon_types("NotAPokemon")
         assert result is None
 
-    @patch("smogon_vgc_mcp.data.pokemon_data._types", {
-        "fluttermane": ["Ghost", "Fairy"]
-    })
+    @patch("smogon_vgc_mcp.data.pokemon_data._types", {"fluttermane": ["Ghost", "Fairy"]})
     def test_spaces_in_name(self):
         """Test Pokemon with spaces in name."""
         result = get_pokemon_types("Flutter Mane")
@@ -244,9 +287,24 @@ class TestTypeChart:
     def test_all_types_present(self):
         """Test all 18 types are in the chart."""
         expected_types = [
-            "Normal", "Fire", "Water", "Electric", "Grass", "Ice",
-            "Fighting", "Poison", "Ground", "Flying", "Psychic", "Bug",
-            "Rock", "Ghost", "Dragon", "Dark", "Steel", "Fairy"
+            "Normal",
+            "Fire",
+            "Water",
+            "Electric",
+            "Grass",
+            "Ice",
+            "Fighting",
+            "Poison",
+            "Ground",
+            "Flying",
+            "Psychic",
+            "Bug",
+            "Rock",
+            "Ghost",
+            "Dragon",
+            "Dark",
+            "Steel",
+            "Fairy",
         ]
         assert len(TYPE_CHART) == 18
         for t in expected_types:

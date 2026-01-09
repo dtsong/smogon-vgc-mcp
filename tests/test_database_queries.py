@@ -49,14 +49,16 @@ class TestGetSnapshot:
     @patch("smogon_vgc_mcp.database.queries.get_connection")
     async def test_returns_snapshot_when_found(self, mock_get_conn):
         """Test returning snapshot when found."""
-        mock_row = create_mock_row({
-            "id": 1,
-            "format": "regf",
-            "month": "2025-12",
-            "elo_bracket": 1500,
-            "num_battles": 100000,
-            "fetched_at": "2025-12-15T10:00:00",
-        })
+        mock_row = create_mock_row(
+            {
+                "id": 1,
+                "format": "regf",
+                "month": "2025-12",
+                "elo_bracket": 1500,
+                "num_battles": 100000,
+                "fetched_at": "2025-12-15T10:00:00",
+            }
+        )
 
         mock_cursor = AsyncMock()
         mock_cursor.fetchone = AsyncMock(return_value=mock_row)
@@ -107,22 +109,26 @@ class TestGetAllSnapshots:
     async def test_returns_list_of_snapshots(self, mock_get_conn):
         """Test returning list of snapshots."""
         mock_rows = [
-            create_mock_row({
-                "id": 1,
-                "format": "regf",
-                "month": "2025-12",
-                "elo_bracket": 1500,
-                "num_battles": 100000,
-                "fetched_at": "2025-12-15",
-            }),
-            create_mock_row({
-                "id": 2,
-                "format": "regf",
-                "month": "2025-11",
-                "elo_bracket": 1500,
-                "num_battles": 90000,
-                "fetched_at": "2025-11-15",
-            }),
+            create_mock_row(
+                {
+                    "id": 1,
+                    "format": "regf",
+                    "month": "2025-12",
+                    "elo_bracket": 1500,
+                    "num_battles": 100000,
+                    "fetched_at": "2025-12-15",
+                }
+            ),
+            create_mock_row(
+                {
+                    "id": 2,
+                    "format": "regf",
+                    "month": "2025-11",
+                    "elo_bracket": 1500,
+                    "num_battles": 90000,
+                    "fetched_at": "2025-11-15",
+                }
+            ),
         ]
 
         mock_cursor = AsyncMock()
@@ -371,13 +377,15 @@ class TestGetCountersFor:
         from smogon_vgc_mcp.database.models import CheckCounter
 
         mock_rows = [
-            create_mock_row({
-                "counter": "Urshifu-Rapid-Strike",
-                "score": 55.0,
-                "win_percent": 60.0,
-                "ko_percent": 35.0,
-                "switch_percent": 25.0,
-            }),
+            create_mock_row(
+                {
+                    "counter": "Urshifu-Rapid-Strike",
+                    "score": 55.0,
+                    "win_percent": 60.0,
+                    "ko_percent": 35.0,
+                    "switch_percent": 25.0,
+                }
+            ),
         ]
 
         mock_cursor = AsyncMock()

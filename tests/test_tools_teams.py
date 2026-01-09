@@ -16,6 +16,7 @@ class MockFastMCP:
         def decorator(func):
             self.tools[func.__name__] = func
             return func
+
         return decorator
 
 
@@ -184,7 +185,12 @@ class TestGetPokemonTournamentSpreads:
     async def test_returns_spreads(self, mock_get_spreads, mock_mcp):
         """Test returning EV spreads."""
         mock_get_spreads.return_value = [
-            {"nature": "Careful", "evs": "252/4/0/0/252/0", "count": 10, "team_ids": ["F1", "F2", "F3"]},
+            {
+                "nature": "Careful",
+                "evs": "252/4/0/0/252/0",
+                "count": 10,
+                "team_ids": ["F1", "F2", "F3"],
+            },
         ]
 
         get_pokemon_tournament_spreads = mock_mcp.tools["get_pokemon_tournament_spreads"]
@@ -297,3 +303,80 @@ class TestGetTeamDatabaseStats:
 
         assert result["total_teams"] == 500
         assert "VGC Pastes Repository" in result["source"]
+
+
+class TestTeamsBoundary:
+    """Boundary and error tests for team tools."""
+
+    @pytest.fixture
+    def mock_mcp(self):
+        """Create mock MCP and register tools."""
+        from smogon_vgc_mcp.tools.teams import register_team_tools
+
+        mcp = MockFastMCP()
+        register_team_tools(mcp)
+        return mcp
+
+    @pytest.mark.asyncio
+    async def test_get_tournament_team_invalid_format(self, mock_mcp):
+        """Test invalid team ID format returns error."""
+        get_tournament_team = mock_mcp.tools["get_tournament_team"]
+        result = await get_tournament_team("invalid")
+
+        assert "error" in result
+        assert "hint" in result
+
+    @pytest.mark.asyncio
+    async def test_search_teams_invalid_format_code(self, mock_mcp):
+        """Test invalid format code returns error."""
+        search_tournament_teams = mock_mcp.tools["search_tournament_teams"]
+        result = await search_tournament_teams(pokemon="Incineroar", format="invalid_format")
+
+        assert "error" in result
+        assert "hint" in result
+
+    @pytest.mark.asyncio
+    async def test_find_core_empty_pokemon1(self, mock_mcp):
+        """Test empty pokemon1 returns error."""
+        find_teams_with_pokemon_core = mock_mcp.tools["find_teams_with_pokemon_core"]
+        result = await find_teams_with_pokemon_core("", "Flutter Mane")
+
+        assert "error" in result
+
+    @pytest.mark.asyncio
+    async def test_find_core_empty_pokemon2(self, mock_mcp):
+        """Test empty pokemon2 returns error."""
+        find_teams_with_pokemon_core = mock_mcp.tools["find_teams_with_pokemon_core"]
+        result = await find_teams_with_pokemon_core("Incineroar", "")
+
+        assert "error" in result
+
+    @pytest.mark.asyncio
+    @patch("smogon_vgc_mcp.tools.teams.get_teams_with_core")
+    async def test_find_core_with_four_pokemon(self, mock_get_core, mock_mcp):
+        """Test finding core with four Pokemon."""
+        mock_get_core.return_value = []
+
+        find_teams_with_pokemon_core = mock_mcp.tools["find_teams_with_pokemon_core"]
+        result = await find_teams_with_pokemon_core(
+            "Incineroar", "Flutter Mane", "Raging Bolt", "Urshifu"
+        )
+
+        assert result["core"] == ["Incineroar", "Flutter Mane", "Raging Bolt", "Urshifu"]
+
+    @pytest.mark.asyncio
+    async def test_get_pokemon_tournament_spreads_empty_pokemon(self, mock_mcp):
+        """Test empty Pokemon name returns error."""
+        get_pokemon_tournament_spreads = mock_mcp.tools["get_pokemon_tournament_spreads"]
+        result = await get_pokemon_tournament_spreads("")
+
+        assert "error" in result
+
+    @pytest.mark.asyncio
+    async def test_get_team_database_stats_invalid_format(self, mock_mcp):
+        """Test invalid format code returns error."""
+        get_team_database_stats = mock_mcp.tools["get_team_database_stats"]
+        result = await get_team_database_stats(format="invalid")
+
+        assert "error" in result
+        assert "hint" in result

@@ -7,17 +7,24 @@ from smogon_vgc_mcp.utils.validators import (
     VALID_TERRAIN,
     VALID_WEATHER,
     ValidationError,
+    validate_ability_name,
     validate_elo_bracket,
     validate_ev_spread,
     validate_format_code,
+    validate_item_name,
     validate_iv_spread,
     validate_level,
     validate_limit,
+    validate_month,
+    validate_move_name,
     validate_nature,
     validate_pokemon_list,
     validate_pokemon_name,
+    validate_query_string,
+    validate_replay_url,
     validate_stat_boost,
     validate_stat_boosts,
+    validate_team_id,
     validate_terrain,
     validate_type_list,
     validate_type_name,
@@ -375,3 +382,191 @@ class TestValidateStatBoosts:
         with pytest.raises(ValidationError) as exc:
             validate_stat_boosts({"atk": 10})
         assert "Stat boosts must be -6 to +6" in exc.value.hint
+
+
+class TestValidateMoveName:
+    def test_valid_move(self):
+        result = validate_move_name("Fake Out")
+        assert result == "Fake Out"
+
+    def test_strips_whitespace(self):
+        result = validate_move_name("  Fake Out  ")
+        assert result == "Fake Out"
+
+    def test_empty_raises(self):
+        with pytest.raises(ValidationError) as exc:
+            validate_move_name("")
+        assert "cannot be empty" in exc.value.message
+
+    def test_whitespace_only_raises(self):
+        with pytest.raises(ValidationError) as exc:
+            validate_move_name("   ")
+        assert "cannot be empty" in exc.value.message
+
+
+class TestValidateItemName:
+    def test_valid_item(self):
+        result = validate_item_name("Choice Band")
+        assert result == "Choice Band"
+
+    def test_strips_whitespace(self):
+        result = validate_item_name("  Choice Band  ")
+        assert result == "Choice Band"
+
+    def test_empty_raises(self):
+        with pytest.raises(ValidationError) as exc:
+            validate_item_name("")
+        assert "cannot be empty" in exc.value.message
+
+    def test_whitespace_only_raises(self):
+        with pytest.raises(ValidationError) as exc:
+            validate_item_name("   ")
+        assert "cannot be empty" in exc.value.message
+
+
+class TestValidateAbilityName:
+    def test_valid_ability(self):
+        result = validate_ability_name("Intimidate")
+        assert result == "Intimidate"
+
+    def test_strips_whitespace(self):
+        result = validate_ability_name("  Intimidate  ")
+        assert result == "Intimidate"
+
+    def test_empty_raises(self):
+        with pytest.raises(ValidationError) as exc:
+            validate_ability_name("")
+        assert "cannot be empty" in exc.value.message
+
+    def test_whitespace_only_raises(self):
+        with pytest.raises(ValidationError) as exc:
+            validate_ability_name("   ")
+        assert "cannot be empty" in exc.value.message
+
+
+class TestValidateMonth:
+    def test_valid_month(self):
+        result = validate_month("2025-12")
+        assert result == "2025-12"
+
+    def test_valid_january(self):
+        result = validate_month("2025-01")
+        assert result == "2025-01"
+
+    def test_strips_whitespace(self):
+        result = validate_month("  2025-12  ")
+        assert result == "2025-12"
+
+    def test_empty_raises(self):
+        with pytest.raises(ValidationError) as exc:
+            validate_month("")
+        assert "cannot be empty" in exc.value.message
+
+    def test_invalid_format_raises(self):
+        with pytest.raises(ValidationError) as exc:
+            validate_month("12-2025")
+        assert "Invalid month format" in exc.value.message
+        assert "YYYY-MM" in exc.value.hint
+
+    def test_invalid_month_number_raises(self):
+        with pytest.raises(ValidationError) as exc:
+            validate_month("2025-13")
+        assert "Invalid month format" in exc.value.message
+
+    def test_invalid_month_zero_raises(self):
+        with pytest.raises(ValidationError) as exc:
+            validate_month("2025-00")
+        assert "Invalid month format" in exc.value.message
+
+    def test_missing_leading_zero_raises(self):
+        with pytest.raises(ValidationError) as exc:
+            validate_month("2025-1")
+        assert "Invalid month format" in exc.value.message
+
+
+class TestValidateReplayUrl:
+    def test_valid_url(self):
+        result = validate_replay_url("https://replay.pokemonshowdown.com/gen9vgc2026regf-123456")
+        assert "replay.pokemonshowdown.com" in result
+
+    def test_strips_whitespace(self):
+        result = validate_replay_url("  https://replay.pokemonshowdown.com/gen9vgc2026regf-123  ")
+        assert result.startswith("https://")
+
+    def test_empty_raises(self):
+        with pytest.raises(ValidationError) as exc:
+            validate_replay_url("")
+        assert "cannot be empty" in exc.value.message
+
+    def test_invalid_domain_raises(self):
+        with pytest.raises(ValidationError) as exc:
+            validate_replay_url("https://example.com/replay")
+        assert "Invalid replay URL" in exc.value.message
+        assert "replay.pokemonshowdown.com" in exc.value.hint
+
+
+class TestValidateQueryString:
+    def test_valid_query(self):
+        result = validate_query_string("incineroar")
+        assert result == "incineroar"
+
+    def test_strips_whitespace(self):
+        result = validate_query_string("  flutter  ")
+        assert result == "flutter"
+
+    def test_empty_raises(self):
+        with pytest.raises(ValidationError) as exc:
+            validate_query_string("")
+        assert "cannot be empty" in exc.value.message
+
+    def test_whitespace_only_raises(self):
+        with pytest.raises(ValidationError) as exc:
+            validate_query_string("   ")
+        assert "cannot be empty" in exc.value.message
+
+    def test_custom_field_name(self):
+        with pytest.raises(ValidationError) as exc:
+            validate_query_string("", "Pokemon name")
+        assert "Pokemon name cannot be empty" in exc.value.message
+
+    def test_too_long_raises(self):
+        long_query = "a" * 101
+        with pytest.raises(ValidationError) as exc:
+            validate_query_string(long_query)
+        assert "too long" in exc.value.message
+        assert "max 100 characters" in exc.value.message
+
+
+class TestValidateTeamId:
+    def test_valid_team_id(self):
+        result = validate_team_id("F123")
+        assert result == "F123"
+
+    def test_strips_whitespace(self):
+        result = validate_team_id("  F123  ")
+        assert result == "F123"
+
+    def test_empty_raises(self):
+        with pytest.raises(ValidationError) as exc:
+            validate_team_id("")
+        assert "cannot be empty" in exc.value.message
+
+    def test_invalid_format_lowercase_raises(self):
+        with pytest.raises(ValidationError) as exc:
+            validate_team_id("f123")
+        assert "Invalid team ID format" in exc.value.message
+
+    def test_invalid_format_no_number_raises(self):
+        with pytest.raises(ValidationError) as exc:
+            validate_team_id("F")
+        assert "Invalid team ID format" in exc.value.message
+
+    def test_invalid_format_no_letter_raises(self):
+        with pytest.raises(ValidationError) as exc:
+            validate_team_id("123")
+        assert "Invalid team ID format" in exc.value.message
+
+    def test_multiple_letters_raises(self):
+        with pytest.raises(ValidationError) as exc:
+            validate_team_id("FF123")
+        assert "Invalid team ID format" in exc.value.message

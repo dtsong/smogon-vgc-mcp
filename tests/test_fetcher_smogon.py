@@ -1,7 +1,6 @@
 """Tests for fetcher/smogon.py - Smogon stats parsing."""
 
 
-
 class TestParseSpread:
     """Tests for parse_spread function."""
 
@@ -40,9 +39,21 @@ class TestParseSpread:
         from smogon_vgc_mcp.fetcher.smogon import parse_spread
 
         natures = [
-            "Adamant", "Jolly", "Modest", "Timid", "Brave",
-            "Quiet", "Bold", "Impish", "Calm", "Careful",
-            "Sassy", "Relaxed", "Naive", "Hasty", "Hardy",
+            "Adamant",
+            "Jolly",
+            "Modest",
+            "Timid",
+            "Brave",
+            "Quiet",
+            "Bold",
+            "Impish",
+            "Calm",
+            "Careful",
+            "Sassy",
+            "Relaxed",
+            "Naive",
+            "Hasty",
+            "Hardy",
         ]
 
         for nature in natures:
@@ -105,19 +116,25 @@ class TestSmogonDataStructure:
         # Valid common spreads
         spreads = [
             "Careful:252/4/0/0/252/0",  # 508
-            "Timid:4/0/0/252/0/252",    # 508
+            "Timid:4/0/0/252/0/252",  # 508
             "Adamant:252/252/4/0/0/0",  # 508
-            "Bold:252/0/252/4/0/0",     # 508
-            "Modest:0/0/0/252/4/252",   # 508
+            "Bold:252/0/252/4/0/0",  # 508
+            "Modest:0/0/0/252/4/252",  # 508
         ]
 
         for spread_str in spreads:
             result = parse_spread(spread_str)
             assert result is not None
-            total = sum([
-                result["hp"], result["atk"], result["def"],
-                result["spa"], result["spd"], result["spe"]
-            ])
+            total = sum(
+                [
+                    result["hp"],
+                    result["atk"],
+                    result["def"],
+                    result["spa"],
+                    result["spd"],
+                    result["spe"],
+                ]
+            )
             # EVs should not exceed 508 (though Smogon data might have edge cases)
             assert total <= 508
 

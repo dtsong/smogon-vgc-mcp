@@ -16,6 +16,7 @@ class MockFastMCP:
         def decorator(func):
             self.tools[func.__name__] = func
             return func
+
         return decorator
 
 

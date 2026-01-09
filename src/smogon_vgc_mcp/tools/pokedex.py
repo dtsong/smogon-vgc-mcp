@@ -22,7 +22,11 @@ from smogon_vgc_mcp.database.queries import (
 from smogon_vgc_mcp.utils import (
     ValidationError,
     make_error_response,
+    validate_ability_name,
+    validate_item_name,
     validate_limit,
+    validate_move_name,
+    validate_query_string,
     validate_type_name,
 )
 
@@ -90,6 +94,11 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
         Args:
             move: Move name (e.g., "Moonblast", "Close Combat"). Case-insensitive.
         """
+        try:
+            move = validate_move_name(move)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         result = await get_dex_move(move)
 
         if not result:
@@ -126,6 +135,11 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
         Args:
             ability: Ability name (e.g., "Protosynthesis", "Intimidate"). Case-insensitive.
         """
+        try:
+            ability = validate_ability_name(ability)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         result = await get_dex_ability(ability)
 
         if not result:
@@ -157,6 +171,11 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
         Args:
             item: Item name (e.g., "Booster Energy", "Choice Scarf"). Case-insensitive.
         """
+        try:
+            item = validate_item_name(item)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         result = await get_dex_item(item)
 
         if not result:
@@ -304,8 +323,7 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
             limit: Max results (default 10, max 50).
         """
         try:
-            if not query or not query.strip():
-                raise ValidationError("Search query cannot be empty")
+            query = validate_query_string(query, "Search query")
             limit = validate_limit(limit, max_limit=50)
         except ValidationError as e:
             return make_error_response(e.message, hint=e.hint)

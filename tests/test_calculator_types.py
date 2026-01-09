@@ -19,12 +19,15 @@ class TestGetPokemonWeaknesses:
     def test_fire_dark_pokemon(self, mock_resist, mock_weak, mock_types):
         """Test Fire/Dark type (Incineroar)."""
         mock_types.return_value = ["Fire", "Dark"]
-        mock_weak.return_value = [
-            ("Water", 2), ("Fighting", 2), ("Ground", 2), ("Rock", 2)
-        ]
+        mock_weak.return_value = [("Water", 2), ("Fighting", 2), ("Ground", 2), ("Rock", 2)]
         mock_resist.return_value = [
-            ("Fire", 0.5), ("Grass", 0.5), ("Ice", 0.5), ("Ghost", 0.5),
-            ("Dark", 0.5), ("Steel", 0.5), ("Psychic", 0)
+            ("Fire", 0.5),
+            ("Grass", 0.5),
+            ("Ice", 0.5),
+            ("Ghost", 0.5),
+            ("Dark", 0.5),
+            ("Steel", 0.5),
+            ("Psychic", 0),
         ]
 
         result = get_pokemon_weaknesses("Incineroar")
@@ -44,10 +47,16 @@ class TestGetPokemonWeaknesses:
         mock_types.return_value = ["Grass", "Steel"]
         mock_weak.return_value = [("Fire", 4), ("Fighting", 2)]
         mock_resist.return_value = [
-            ("Normal", 0.5), ("Water", 0.5), ("Electric", 0.5),
-            ("Grass", 0.25), ("Psychic", 0.5), ("Rock", 0.5),
-            ("Dragon", 0.5), ("Steel", 0.5), ("Fairy", 0.5),
-            ("Poison", 0)
+            ("Normal", 0.5),
+            ("Water", 0.5),
+            ("Electric", 0.5),
+            ("Grass", 0.25),
+            ("Psychic", 0.5),
+            ("Rock", 0.5),
+            ("Dragon", 0.5),
+            ("Steel", 0.5),
+            ("Fairy", 0.5),
+            ("Poison", 0),
         ]
 
         result = get_pokemon_weaknesses("Ferrothorn")
@@ -110,6 +119,7 @@ class TestAnalyzeTeamTypes:
     @patch("smogon_vgc_mcp.calculator.types.get_type_effectiveness")
     def test_team_with_unknown_pokemon(self, mock_eff, mock_types):
         """Test team with unknown Pokemon."""
+
         def mock_get_types(pokemon):
             if pokemon == "Incineroar":
                 return ["Fire", "Dark"]
@@ -128,6 +138,7 @@ class TestAnalyzeTeamTypes:
     @patch("smogon_vgc_mcp.calculator.types.get_type_effectiveness")
     def test_shared_weakness_detection(self, mock_eff, mock_types):
         """Test detection of shared weaknesses."""
+
         def mock_get_types(pokemon):
             types = {
                 "Incineroar": ["Fire", "Dark"],
@@ -157,6 +168,7 @@ class TestGetOffensiveCoverage:
     @patch("smogon_vgc_mcp.calculator.types.get_type_effectiveness")
     def test_single_move_type(self, mock_eff):
         """Test coverage with single move type."""
+
         def mock_effectiveness(atk_type, def_types):
             if atk_type == "Fire":
                 if def_types == ["Grass"]:
@@ -177,6 +189,7 @@ class TestGetOffensiveCoverage:
     @patch("smogon_vgc_mcp.calculator.types.get_type_effectiveness")
     def test_dual_stab_coverage(self, mock_eff):
         """Test coverage with dual STAB."""
+
         def mock_effectiveness(atk_type, def_types):
             # Fire hits Grass, Ice, Steel, Bug SE
             if atk_type == "Fire" and def_types[0] in ["Grass", "Ice", "Steel", "Bug"]:
@@ -197,6 +210,7 @@ class TestGetOffensiveCoverage:
     @patch("smogon_vgc_mcp.calculator.types.get_type_effectiveness")
     def test_coverage_gaps(self, mock_eff):
         """Test detection of coverage gaps."""
+
         def mock_effectiveness(atk_type, def_types):
             # Normal doesn't hit anything SE
             return 1.0
@@ -211,6 +225,7 @@ class TestGetOffensiveCoverage:
     @patch("smogon_vgc_mcp.calculator.types.get_type_effectiveness")
     def test_immunity_detection(self, mock_eff):
         """Test detection of immune types."""
+
         def mock_effectiveness(atk_type, def_types):
             # Normal doesn't affect Ghost
             if atk_type == "Normal" and def_types == ["Ghost"]:

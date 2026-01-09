@@ -17,7 +17,10 @@ from smogon_vgc_mcp.utils import (
     round_percent,
     validate_elo_bracket,
     validate_format_code,
+    validate_item_name,
     validate_limit,
+    validate_month,
+    validate_move_name,
     validate_type_name,
 )
 
@@ -54,6 +57,7 @@ def register_teambuilding_tools(mcp: FastMCP) -> None:
         """
         try:
             validate_format_code(format)
+            month = validate_month(month)
             validate_elo_bracket(elo)
             limit = validate_limit(limit)
         except ValidationError as e:
@@ -105,11 +109,11 @@ def register_teambuilding_tools(mcp: FastMCP) -> None:
             limit: Number of Pokemon to return.
         """
         try:
+            item = validate_item_name(item)
             validate_format_code(format)
+            month = validate_month(month)
             validate_elo_bracket(elo)
             limit = validate_limit(limit)
-            if not item or not item.strip():
-                raise ValidationError("Item name cannot be empty")
         except ValidationError as e:
             return make_error_response(e.message, hint=e.hint)
 
@@ -159,11 +163,11 @@ def register_teambuilding_tools(mcp: FastMCP) -> None:
             limit: Number of Pokemon to return.
         """
         try:
+            move = validate_move_name(move)
             validate_format_code(format)
+            month = validate_month(month)
             validate_elo_bracket(elo)
             limit = validate_limit(limit)
-            if not move or not move.strip():
-                raise ValidationError("Move name cannot be empty")
         except ValidationError as e:
             return make_error_response(e.message, hint=e.hint)
 
@@ -215,10 +219,11 @@ def register_teambuilding_tools(mcp: FastMCP) -> None:
             limit: Number of Pokemon to return.
         """
         try:
+            tera_type = validate_type_name(tera_type)
             validate_format_code(format)
+            month = validate_month(month)
             validate_elo_bracket(elo)
             limit = validate_limit(limit)
-            tera_type = validate_type_name(tera_type)
         except ValidationError as e:
             return make_error_response(e.message, hint=e.hint)
 
@@ -274,6 +279,7 @@ def register_teambuilding_tools(mcp: FastMCP) -> None:
         """
         try:
             validate_format_code(format)
+            month = validate_month(month)
             validate_elo_bracket(elo)
             limit = validate_limit(limit)
         except ValidationError as e:

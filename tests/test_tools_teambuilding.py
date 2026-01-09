@@ -18,6 +18,7 @@ class MockFastMCP:
         def decorator(func):
             self.tools[func.__name__] = func
             return func
+
         return decorator
 
 
@@ -238,3 +239,70 @@ class TestGetPokemonCounters:
 
         assert "error" in result
         assert "No counter data" in result["error"]
+
+
+class TestTeambuildingBoundary:
+    """Boundary and error tests for teambuilding tools."""
+
+    @pytest.fixture
+    def mock_mcp(self):
+        """Create mock MCP and register tools."""
+        from smogon_vgc_mcp.tools.teambuilding import register_teambuilding_tools
+
+        mcp = MockFastMCP()
+        register_teambuilding_tools(mcp)
+        return mcp
+
+    @pytest.mark.asyncio
+    async def test_get_teammates_invalid_format(self, mock_mcp):
+        """Test invalid format code returns error."""
+        get_pokemon_teammates = mock_mcp.tools["get_pokemon_teammates"]
+        result = await get_pokemon_teammates("Incineroar", format="invalid")
+
+        assert "error" in result
+        assert "hint" in result
+
+    @pytest.mark.asyncio
+    async def test_get_teammates_invalid_elo(self, mock_mcp):
+        """Test invalid ELO bracket returns error."""
+        get_pokemon_teammates = mock_mcp.tools["get_pokemon_teammates"]
+        result = await get_pokemon_teammates("Incineroar", elo=999)
+
+        assert "error" in result
+        assert "hint" in result
+
+    @pytest.mark.asyncio
+    async def test_find_by_tera_invalid_type(self, mock_mcp):
+        """Test invalid Tera type returns error."""
+        find_pokemon_by_tera = mock_mcp.tools["find_pokemon_by_tera"]
+        result = await find_pokemon_by_tera("InvalidType")
+
+        assert "error" in result
+        assert "hint" in result
+
+    @pytest.mark.asyncio
+    async def test_find_by_item_invalid_format(self, mock_mcp):
+        """Test invalid format code returns error."""
+        find_pokemon_by_item = mock_mcp.tools["find_pokemon_by_item"]
+        result = await find_pokemon_by_item("assaultvest", format="invalid")
+
+        assert "error" in result
+        assert "hint" in result
+
+    @pytest.mark.asyncio
+    async def test_find_by_move_invalid_elo(self, mock_mcp):
+        """Test invalid ELO bracket returns error."""
+        find_pokemon_by_move = mock_mcp.tools["find_pokemon_by_move"]
+        result = await find_pokemon_by_move("fakeout", elo=999)
+
+        assert "error" in result
+        assert "hint" in result
+
+    @pytest.mark.asyncio
+    async def test_get_counters_invalid_format(self, mock_mcp):
+        """Test invalid format code returns error."""
+        get_pokemon_counters = mock_mcp.tools["get_pokemon_counters"]
+        result = await get_pokemon_counters("Incineroar", format="invalid")
+
+        assert "error" in result
+        assert "hint" in result

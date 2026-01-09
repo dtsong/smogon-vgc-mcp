@@ -16,6 +16,7 @@ class MockFastMCP:
         def decorator(func):
             self.tools[func.__name__] = func
             return func
+
         return decorator
 
 
@@ -38,7 +39,14 @@ class TestDexPokemon:
         mock_pokemon = MagicMock()
         mock_pokemon.name = "Flutter Mane"
         mock_pokemon.types = ["Ghost", "Fairy"]
-        mock_pokemon.base_stats = {"hp": 55, "atk": 55, "def": 55, "spa": 135, "spd": 135, "spe": 135}
+        mock_pokemon.base_stats = {
+            "hp": 55,
+            "atk": 55,
+            "def": 55,
+            "spa": 135,
+            "spd": 135,
+            "spe": 135,
+        }
         mock_pokemon.abilities = ["Protosynthesis"]
         mock_pokemon.ability_hidden = None
         mock_pokemon.height_m = 1.4
@@ -136,7 +144,9 @@ class TestDexAbility:
         """Test returning ability data."""
         mock_ability = MagicMock()
         mock_ability.name = "Intimidate"
-        mock_ability.short_desc = "On switch-in, this Pokemon lowers the Attack of opponents by 1 stage."
+        mock_ability.short_desc = (
+            "On switch-in, this Pokemon lowers the Attack of opponents by 1 stage."
+        )
         mock_ability.description = None
         mock_ability.rating = 4.5
 
@@ -344,7 +354,14 @@ class TestSearchDex:
         mock_pokemon = MagicMock()
         mock_pokemon.name = "Flutter Mane"
         mock_pokemon.types = ["Ghost", "Fairy"]
-        mock_pokemon.base_stats = {"hp": 55, "atk": 55, "def": 55, "spa": 135, "spd": 135, "spe": 135}
+        mock_pokemon.base_stats = {
+            "hp": 55,
+            "atk": 55,
+            "def": 55,
+            "spa": 135,
+            "spd": 135,
+            "spe": 135,
+        }
 
         mock_search.return_value = [mock_pokemon]
 
@@ -401,7 +418,14 @@ class TestDexPokemonByType:
         mock_pokemon = MagicMock()
         mock_pokemon.name = "Flutter Mane"
         mock_pokemon.types = ["Ghost", "Fairy"]
-        mock_pokemon.base_stats = {"hp": 55, "atk": 55, "def": 55, "spa": 135, "spd": 135, "spe": 135}
+        mock_pokemon.base_stats = {
+            "hp": 55,
+            "atk": 55,
+            "def": 55,
+            "spa": 135,
+            "spd": 135,
+            "spe": 135,
+        }
 
         mock_get_by_type.return_value = [mock_pokemon]
 

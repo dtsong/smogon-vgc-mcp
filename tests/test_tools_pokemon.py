@@ -27,6 +27,7 @@ class MockFastMCP:
         def decorator(func):
             self.tools[func.__name__] = func
             return func
+
         return decorator
 
 
@@ -161,3 +162,76 @@ class TestFindPokemon:
         assert result["matches"] == []
         assert "message" in result
         assert "No Pokemon found" in result["message"]
+
+
+class TestGetPokemonBoundary:
+    """Boundary and error tests for get_pokemon tool."""
+
+    @pytest.fixture
+    def mock_mcp(self):
+        """Create mock MCP and register tools."""
+        from smogon_vgc_mcp.tools.pokemon import register_pokemon_tools
+
+        mcp = MockFastMCP()
+        register_pokemon_tools(mcp)
+        return mcp
+
+    @pytest.mark.asyncio
+    async def test_invalid_format_returns_error(self, mock_mcp):
+        """Test invalid format code returns error."""
+        get_pokemon = mock_mcp.tools["get_pokemon"]
+        result = await get_pokemon("Incineroar", format="invalid_format")
+
+        assert "error" in result
+        assert "hint" in result
+
+    @pytest.mark.asyncio
+    async def test_invalid_elo_returns_error(self, mock_mcp):
+        """Test invalid ELO bracket returns error."""
+        get_pokemon = mock_mcp.tools["get_pokemon"]
+        result = await get_pokemon("Incineroar", elo=999)
+
+        assert "error" in result
+        assert "hint" in result
+
+
+class TestFindPokemonBoundary:
+    """Boundary and error tests for find_pokemon tool."""
+
+    @pytest.fixture
+    def mock_mcp(self):
+        """Create mock MCP and register tools."""
+        from smogon_vgc_mcp.tools.pokemon import register_pokemon_tools
+
+        mcp = MockFastMCP()
+        register_pokemon_tools(mcp)
+        return mcp
+
+    @pytest.mark.asyncio
+    async def test_empty_query_returns_error(self, mock_mcp):
+        """Test empty string query returns error."""
+        find_pokemon = mock_mcp.tools["find_pokemon"]
+        result = await find_pokemon("")
+
+        assert "error" in result
+
+    @pytest.mark.asyncio
+    @patch("smogon_vgc_mcp.tools.pokemon.search_pokemon")
+    async def test_special_characters_handled(self, mock_search, mock_mcp):
+        """Test query with special characters handled."""
+        mock_search.return_value = []
+
+        find_pokemon = mock_mcp.tools["find_pokemon"]
+        result = await find_pokemon("test<>!@#$%")
+
+        assert "error" not in result or "matches" in result
+
+    @pytest.mark.asyncio
+    async def test_very_long_query_returns_error(self, mock_mcp):
+        """Test query > 100 chars returns error."""
+        find_pokemon = mock_mcp.tools["find_pokemon"]
+        long_query = "a" * 150
+        result = await find_pokemon(long_query)
+
+        assert "error" in result
+        assert "hint" in result

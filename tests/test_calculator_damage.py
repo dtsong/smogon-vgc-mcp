@@ -232,12 +232,31 @@ class TestRunCalc:
         mock_path.exists.return_value = True
         mock_run.return_value = MagicMock(
             returncode=0,
-            stdout=json.dumps({
-                "success": True,
-                "damage": [150, 152, 154, 156, 158, 160, 162, 164, 166, 168, 170, 172, 174, 176, 178, 180],
-                "minPercent": 74.2,
-                "maxPercent": 89.1,
-            }),
+            stdout=json.dumps(
+                {
+                    "success": True,
+                    "damage": [
+                        150,
+                        152,
+                        154,
+                        156,
+                        158,
+                        160,
+                        162,
+                        164,
+                        166,
+                        168,
+                        170,
+                        172,
+                        174,
+                        176,
+                        178,
+                        180,
+                    ],
+                    "minPercent": 74.2,
+                    "maxPercent": 89.1,
+                }
+            ),
             stderr="",
         )
 
@@ -279,6 +298,7 @@ class TestRunCalc:
     def test_timeout_handling(self, mock_run, mock_path):
         """Test timeout handling."""
         import subprocess as sp
+
         mock_path.exists.return_value = True
         mock_run.side_effect = sp.TimeoutExpired(cmd="node", timeout=10)
 
@@ -312,7 +332,24 @@ class TestCalculateDamage:
         """Test basic damage calculation."""
         mock_run.return_value = {
             "success": True,
-            "damage": [150, 152, 154, 156, 158, 160, 162, 164, 166, 168, 170, 172, 174, 176, 178, 180],
+            "damage": [
+                150,
+                152,
+                154,
+                156,
+                158,
+                160,
+                162,
+                164,
+                166,
+                168,
+                170,
+                172,
+                174,
+                176,
+                178,
+                180,
+            ],
             "minPercent": 74.2,
             "maxPercent": 89.1,
         }
@@ -518,7 +555,24 @@ class TestDamageRanges:
     def test_damage_array_has_16_values(self):
         """Verify damage calc returns 16 damage values (85-100% rolls)."""
         # This is a conceptual test - actual damage calcs return 16 values
-        damage_range = [150, 152, 154, 156, 158, 160, 162, 164, 166, 168, 170, 172, 174, 176, 178, 180]
+        damage_range = [
+            150,
+            152,
+            154,
+            156,
+            158,
+            160,
+            162,
+            164,
+            166,
+            168,
+            170,
+            172,
+            174,
+            176,
+            178,
+            180,
+        ]
         assert len(damage_range) == 16
 
     def test_min_damage_is_85_percent_of_max(self):
@@ -531,5 +585,22 @@ class TestDamageRanges:
 
     def test_damage_values_are_sorted(self):
         """Verify damage values are in ascending order."""
-        damage_range = [150, 152, 154, 156, 158, 160, 162, 164, 166, 168, 170, 172, 174, 176, 178, 180]
+        damage_range = [
+            150,
+            152,
+            154,
+            156,
+            158,
+            160,
+            162,
+            164,
+            166,
+            168,
+            170,
+            172,
+            174,
+            176,
+            178,
+            180,
+        ]
         assert damage_range == sorted(damage_range)

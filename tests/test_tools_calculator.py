@@ -16,6 +16,7 @@ class MockFastMCP:
         def decorator(func):
             self.tools[func.__name__] = func
             return func
+
         return decorator
 
 
@@ -38,7 +39,14 @@ class TestCalculatePokemonStats:
     async def test_returns_calculated_stats(self, mock_base, mock_calc, mock_format, mock_mcp):
         """Test returning calculated stats."""
         mock_base.return_value = {"hp": 95, "atk": 115, "def": 90, "spa": 80, "spd": 90, "spe": 60}
-        mock_calc.return_value = {"hp": 202, "atk": 167, "def": 110, "spa": 100, "spd": 142, "spe": 80}
+        mock_calc.return_value = {
+            "hp": 202,
+            "atk": 167,
+            "def": 110,
+            "spa": 100,
+            "spd": 142,
+            "spe": 80,
+        }
         mock_format.return_value = "HP: 202 | Atk: 167 | Def: 110 | SpA: 100 | SpD: 142 | Spe: 80"
 
         calculate_pokemon_stats = mock_mcp.tools["calculate_pokemon_stats"]
@@ -100,8 +108,7 @@ class TestComparePokemonSpeeds:
 
         compare_pokemon_speeds = mock_mcp.tools["compare_pokemon_speeds"]
         result = await compare_pokemon_speeds(
-            "Flutter Mane", "4/0/0/252/0/252", "Timid",
-            "Incineroar", "252/4/0/0/252/0", "Careful"
+            "Flutter Mane", "4/0/0/252/0/252", "Timid", "Incineroar", "252/4/0/0/252/0", "Careful"
         )
 
         assert result["faster"] == "Flutter Mane"
@@ -212,3 +219,67 @@ class TestAnalyzeMoveCoverage:
 
         assert result["move_types"] == ["Fire", "Dark"]
         assert "Grass" in result["super_effective_against"]
+
+
+class TestCalculatorBoundary:
+    """Boundary and error tests for calculator tools."""
+
+    @pytest.fixture
+    def mock_mcp(self):
+        """Create mock MCP and register tools."""
+        from smogon_vgc_mcp.tools.calculator import register_calculator_tools
+
+        mcp = MockFastMCP()
+        register_calculator_tools(mcp)
+        return mcp
+
+    @pytest.mark.asyncio
+    async def test_calculate_stats_invalid_nature(self, mock_mcp):
+        """Test invalid nature returns error."""
+        calculate_pokemon_stats = mock_mcp.tools["calculate_pokemon_stats"]
+        result = await calculate_pokemon_stats("Incineroar", "252/4/0/0/252/0", "NotANature")
+
+        assert "error" in result
+
+    @pytest.mark.asyncio
+    @patch("smogon_vgc_mcp.tools.calculator.compare_speeds")
+    async def test_compare_speeds_same_pokemon(self, mock_compare, mock_mcp):
+        """Test same Pokemon comparison."""
+        mock_compare.return_value = {
+            "pokemon1": {"name": "Incineroar", "speed": 80, "nature": "Careful"},
+            "pokemon2": {"name": "Incineroar", "speed": 80, "nature": "Careful"},
+            "difference": 0,
+            "result": "Speed tie",
+            "faster": None,
+        }
+
+        compare_pokemon_speeds = mock_mcp.tools["compare_pokemon_speeds"]
+        result = await compare_pokemon_speeds(
+            "Incineroar", "252/4/0/0/252/0", "Careful", "Incineroar", "252/4/0/0/252/0", "Careful"
+        )
+
+        assert result["difference"] == 0
+
+    @pytest.mark.asyncio
+    @patch("smogon_vgc_mcp.tools.calculator.analyze_team_types")
+    async def test_analyze_team_single_pokemon(self, mock_analyze, mock_mcp):
+        """Test team of 1 Pokemon."""
+        mock_analyze.return_value = {
+            "team": ["Incineroar"],
+            "pokemon_types": {"Incineroar": ["Fire", "Dark"]},
+            "shared_weaknesses": {},
+            "errors": None,
+        }
+
+        analyze_team_type_coverage = mock_mcp.tools["analyze_team_type_coverage"]
+        result = await analyze_team_type_coverage(["Incineroar"])
+
+        assert len(result["team"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_analyze_move_coverage_empty_types(self, mock_mcp):
+        """Test empty type list returns error."""
+        analyze_move_coverage = mock_mcp.tools["analyze_move_coverage"]
+        result = await analyze_move_coverage([])
+
+        assert "error" in result

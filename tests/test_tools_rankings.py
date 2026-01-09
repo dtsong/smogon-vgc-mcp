@@ -21,6 +21,7 @@ class MockFastMCP:
         def decorator(func):
             self.tools[func.__name__] = func
             return func
+
         return decorator
 
 
@@ -120,7 +121,9 @@ class TestComparePokemonUsage:
     @pytest.mark.asyncio
     @patch("smogon_vgc_mcp.tools.rankings.get_pokemon_stats")
     @patch("smogon_vgc_mcp.tools.rankings.get_format")
-    async def test_returns_error_when_not_enough_months(self, mock_get_format, mock_get_stats, mock_mcp):
+    async def test_returns_error_when_not_enough_months(
+        self, mock_get_format, mock_get_stats, mock_mcp
+    ):
         """Test returning error when not enough months."""
         mock_format = MagicMock()
         mock_format.name = "Test Format"
@@ -190,3 +193,77 @@ class TestCompareEloBrackets:
 
         assert "error" in result
         assert "not found" in result["error"]
+
+
+class TestRankingsBoundary:
+    """Boundary and error tests for rankings tools."""
+
+    @pytest.fixture
+    def mock_mcp(self):
+        """Create mock MCP and register tools."""
+        from smogon_vgc_mcp.tools.rankings import register_rankings_tools
+
+        mcp = MockFastMCP()
+        register_rankings_tools(mcp)
+        return mcp
+
+    @pytest.mark.asyncio
+    async def test_get_top_pokemon_invalid_format(self, mock_mcp):
+        """Test invalid format code returns error."""
+        get_top_pokemon = mock_mcp.tools["get_top_pokemon"]
+        result = await get_top_pokemon(format="invalid")
+
+        assert "error" in result
+        assert "hint" in result
+
+    @pytest.mark.asyncio
+    async def test_get_top_pokemon_invalid_elo(self, mock_mcp):
+        """Test invalid ELO bracket returns error."""
+        get_top_pokemon = mock_mcp.tools["get_top_pokemon"]
+        result = await get_top_pokemon(elo=999)
+
+        assert "error" in result
+        assert "hint" in result
+
+    @pytest.mark.asyncio
+    async def test_get_top_pokemon_limit_zero(self, mock_mcp):
+        """Test limit=0 returns error."""
+        get_top_pokemon = mock_mcp.tools["get_top_pokemon"]
+        result = await get_top_pokemon(limit=0)
+
+        assert "error" in result
+        assert "hint" in result
+
+    @pytest.mark.asyncio
+    async def test_compare_usage_empty_pokemon(self, mock_mcp):
+        """Test empty Pokemon name returns error."""
+        compare_pokemon_usage = mock_mcp.tools["compare_pokemon_usage"]
+        result = await compare_pokemon_usage("")
+
+        assert "error" in result
+
+    @pytest.mark.asyncio
+    async def test_compare_usage_invalid_format(self, mock_mcp):
+        """Test invalid format code returns error."""
+        compare_pokemon_usage = mock_mcp.tools["compare_pokemon_usage"]
+        result = await compare_pokemon_usage("Incineroar", format="invalid")
+
+        assert "error" in result
+        assert "hint" in result
+
+    @pytest.mark.asyncio
+    async def test_compare_elo_empty_pokemon(self, mock_mcp):
+        """Test empty Pokemon name returns error."""
+        compare_elo_brackets = mock_mcp.tools["compare_elo_brackets"]
+        result = await compare_elo_brackets("")
+
+        assert "error" in result
+
+    @pytest.mark.asyncio
+    async def test_compare_elo_invalid_format(self, mock_mcp):
+        """Test invalid format code returns error."""
+        compare_elo_brackets = mock_mcp.tools["compare_elo_brackets"]
+        result = await compare_elo_brackets("Incineroar", format="invalid")
+
+        assert "error" in result
+        assert "hint" in result

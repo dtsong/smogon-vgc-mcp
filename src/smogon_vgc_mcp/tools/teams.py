@@ -16,6 +16,8 @@ from smogon_vgc_mcp.utils import (
     make_error_response,
     validate_format_code,
     validate_limit,
+    validate_query_string,
+    validate_team_id,
 )
 
 
@@ -40,11 +42,10 @@ def register_team_tools(mcp: FastMCP) -> None:
         Args:
             team_id: Team ID (e.g., "F123", "G456"). Format prefix + number.
         """
-        if not team_id or not team_id.strip():
-            return make_error_response(
-                "Team ID cannot be empty",
-                hint="Team IDs start with format prefix + number (e.g., F123 for Reg F)",
-            )
+        try:
+            team_id = validate_team_id(team_id)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
 
         team = await get_team(team_id)
 
@@ -115,6 +116,12 @@ def register_team_tools(mcp: FastMCP) -> None:
             )
 
         try:
+            if pokemon:
+                pokemon = validate_query_string(pokemon, "pokemon")
+            if tournament:
+                tournament = validate_query_string(tournament, "tournament")
+            if owner:
+                owner = validate_query_string(owner, "owner")
             if format:
                 validate_format_code(format)
             limit = validate_limit(limit)

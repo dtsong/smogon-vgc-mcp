@@ -1,6 +1,5 @@
 """Tests for database/models.py - Data models."""
 
-
 from smogon_vgc_mcp.database.models import (
     AbilityUsage,
     CheckCounter,
@@ -122,15 +121,21 @@ class TestEVSpread:
         """Test common VGC EV spreads."""
         # Physical attacker spread
         physical = EVSpread(
-            nature="Adamant", hp=252, atk=252, def_=4, spa=0, spd=0, spe=0,
-            count=10000, percent=20.0
+            nature="Adamant",
+            hp=252,
+            atk=252,
+            def_=4,
+            spa=0,
+            spd=0,
+            spe=0,
+            count=10000,
+            percent=20.0,
         )
         assert physical.hp + physical.atk + physical.def_ == 508
 
         # Speed special attacker spread
         special = EVSpread(
-            nature="Timid", hp=4, atk=0, def_=0, spa=252, spd=0, spe=252,
-            count=8000, percent=16.0
+            nature="Timid", hp=4, atk=0, def_=0, spa=252, spd=0, spe=252, count=8000, percent=16.0
         )
         assert special.hp + special.spa + special.spe == 508
 

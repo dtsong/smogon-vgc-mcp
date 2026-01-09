@@ -17,6 +17,8 @@ from smogon_vgc_mcp.utils import (
     round_percent,
     validate_elo_bracket,
     validate_format_code,
+    validate_month,
+    validate_query_string,
 )
 
 
@@ -54,6 +56,7 @@ def register_pokemon_tools(mcp: FastMCP) -> None:
         """
         try:
             validate_format_code(format)
+            month = validate_month(month)
             validate_elo_bracket(elo)
         except ValidationError as e:
             return make_error_response(e.message, hint=e.hint)
@@ -149,10 +152,10 @@ def register_pokemon_tools(mcp: FastMCP) -> None:
             elo: ELO bracket.
         """
         try:
+            query = validate_query_string(query, "Search query")
             validate_format_code(format)
+            month = validate_month(month)
             validate_elo_bracket(elo)
-            if not query or not query.strip():
-                raise ValidationError("Search query cannot be empty")
         except ValidationError as e:
             return make_error_response(e.message, hint=e.hint)
 

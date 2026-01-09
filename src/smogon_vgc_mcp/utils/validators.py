@@ -1,5 +1,7 @@
 """Input validation utilities for MCP tools."""
 
+import re
+
 from smogon_vgc_mcp.data.pokemon_data import ALL_TYPES, NATURE_MODIFIERS, get_base_stats
 from smogon_vgc_mcp.formats import FORMATS
 from smogon_vgc_mcp.utils.ev_iv_parser import parse_ev_string, parse_iv_string
@@ -449,3 +451,151 @@ def validate_stat_boosts(boosts: dict[str, int] | None) -> dict[str, int] | None
         validated[stat_lower] = validate_stat_boost(boost, stat)
 
     return validated
+
+
+def validate_move_name(move: str) -> str:
+    """Validate move name is not empty.
+
+    Args:
+        move: Move name
+
+    Returns:
+        Stripped move name
+
+    Raises:
+        ValidationError: If move name is empty
+    """
+    if not move or not move.strip():
+        raise ValidationError("Move name cannot be empty")
+    return move.strip()
+
+
+def validate_item_name(item: str) -> str:
+    """Validate item name is not empty.
+
+    Args:
+        item: Item name
+
+    Returns:
+        Stripped item name
+
+    Raises:
+        ValidationError: If item name is empty
+    """
+    if not item or not item.strip():
+        raise ValidationError("Item name cannot be empty")
+    return item.strip()
+
+
+def validate_ability_name(ability: str) -> str:
+    """Validate ability name is not empty.
+
+    Args:
+        ability: Ability name
+
+    Returns:
+        Stripped ability name
+
+    Raises:
+        ValidationError: If ability name is empty
+    """
+    if not ability or not ability.strip():
+        raise ValidationError("Ability name cannot be empty")
+    return ability.strip()
+
+
+def validate_month(month: str) -> str:
+    """Validate month is in YYYY-MM format.
+
+    Args:
+        month: Month string (e.g., "2025-12")
+
+    Returns:
+        Validated month string
+
+    Raises:
+        ValidationError: If month format is invalid
+    """
+    if not month or not month.strip():
+        raise ValidationError("Month cannot be empty")
+
+    month = month.strip()
+    if not re.match(r"^\d{4}-(0[1-9]|1[0-2])$", month):
+        raise ValidationError(
+            f"Invalid month format: '{month}'",
+            hint="Use YYYY-MM format (e.g., '2025-12')",
+        )
+    return month
+
+
+def validate_replay_url(url: str) -> str:
+    """Validate Pokemon Showdown replay URL.
+
+    Args:
+        url: Replay URL
+
+    Returns:
+        Stripped URL
+
+    Raises:
+        ValidationError: If URL is empty or not from Pokemon Showdown
+    """
+    if not url or not url.strip():
+        raise ValidationError("Replay URL cannot be empty")
+
+    url = url.strip()
+    if "replay.pokemonshowdown.com" not in url:
+        raise ValidationError(
+            "Invalid replay URL",
+            hint="URL must be from replay.pokemonshowdown.com",
+        )
+    return url
+
+
+def validate_query_string(query: str, field_name: str = "query") -> str:
+    """Validate search query is not empty and reasonable length.
+
+    Args:
+        query: Search query string
+        field_name: Name of field for error messages
+
+    Returns:
+        Stripped query string
+
+    Raises:
+        ValidationError: If query is empty or too long
+    """
+    if not query or not query.strip():
+        raise ValidationError(f"{field_name} cannot be empty")
+
+    query = query.strip()
+    if len(query) > 100:
+        raise ValidationError(
+            f"{field_name} too long (max 100 characters)",
+            hint="Use a shorter search term",
+        )
+    return query
+
+
+def validate_team_id(team_id: str) -> str:
+    """Validate team ID format (e.g., 'F123').
+
+    Args:
+        team_id: Team ID string
+
+    Returns:
+        Stripped team ID
+
+    Raises:
+        ValidationError: If team ID is empty or invalid format
+    """
+    if not team_id or not team_id.strip():
+        raise ValidationError("Team ID cannot be empty")
+
+    team_id = team_id.strip()
+    if not re.match(r"^[A-Z]\d+$", team_id):
+        raise ValidationError(
+            f"Invalid team ID format: '{team_id}'",
+            hint="Team IDs are format letter + number (e.g., 'F123')",
+        )
+    return team_id

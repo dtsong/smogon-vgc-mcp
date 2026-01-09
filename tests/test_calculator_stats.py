@@ -208,7 +208,12 @@ class TestCalculateAllStats:
     def test_flutter_mane_timid(self, mock_nature, mock_base):
         """Test Timid Flutter Mane (4 HP / 252 SpA / 252 Spe)."""
         mock_base.return_value = {
-            "hp": 55, "atk": 55, "def": 55, "spa": 135, "spd": 135, "spe": 135
+            "hp": 55,
+            "atk": 55,
+            "def": 55,
+            "spa": 135,
+            "spd": 135,
+            "spe": 135,
         }
 
         # Timid: +Spe, -Atk

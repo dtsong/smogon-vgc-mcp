@@ -28,6 +28,7 @@ class MockFastMCP:
         def decorator(func):
             self.resources[uri_template] = func
             return func
+
         return decorator
 
 

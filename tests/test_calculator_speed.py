@@ -19,7 +19,12 @@ class TestGetSpeedStat:
     def test_returns_speed_from_stats(self, mock_calc):
         """Test that speed stat is extracted from calculate_all_stats."""
         mock_calc.return_value = {
-            "hp": 202, "atk": 167, "def": 110, "spa": 100, "spd": 142, "spe": 80
+            "hp": 202,
+            "atk": 167,
+            "def": 110,
+            "spa": 100,
+            "spd": 142,
+            "spe": 80,
         }
 
         result = get_speed_stat("Incineroar", "252/4/0/0/252/0", nature="Careful")
@@ -31,7 +36,12 @@ class TestGetSpeedStat:
     def test_max_speed_flutter_mane(self, mock_calc):
         """Test max speed Flutter Mane (252 Spe, Timid)."""
         mock_calc.return_value = {
-            "hp": 131, "atk": 65, "def": 75, "spa": 187, "spd": 155, "spe": 205
+            "hp": 131,
+            "atk": 65,
+            "def": 75,
+            "spa": 187,
+            "spd": 155,
+            "spe": 205,
         }
 
         result = get_speed_stat("Flutter Mane", "4/0/0/252/0/252", nature="Timid")
@@ -51,12 +61,16 @@ class TestGetSpeedStat:
     def test_with_ivs_parameter(self, mock_calc):
         """Test with custom IVs (0 Speed for Trick Room)."""
         mock_calc.return_value = {
-            "hp": 202, "atk": 167, "def": 110, "spa": 100, "spd": 142, "spe": 49
+            "hp": 202,
+            "atk": 167,
+            "def": 110,
+            "spa": 100,
+            "spd": 142,
+            "spe": 49,
         }
 
         result = get_speed_stat(
-            "Incineroar", "252/4/0/0/252/0",
-            ivs="31/31/31/31/31/0", nature="Brave"
+            "Incineroar", "252/4/0/0/252/0", ivs="31/31/31/31/31/0", nature="Brave"
         )
 
         assert result == 49
@@ -71,8 +85,7 @@ class TestCompareSpeeds:
         mock_speed.side_effect = [205, 80]  # Flutter Mane vs Incineroar
 
         result = compare_speeds(
-            "Flutter Mane", "4/0/0/252/0/252", "Timid",
-            "Incineroar", "252/4/0/0/252/0", "Careful"
+            "Flutter Mane", "4/0/0/252/0/252", "Timid", "Incineroar", "252/4/0/0/252/0", "Careful"
         )
 
         assert result["faster"] == "Flutter Mane"
@@ -87,8 +100,7 @@ class TestCompareSpeeds:
         mock_speed.side_effect = [80, 205]  # Incineroar vs Flutter Mane
 
         result = compare_speeds(
-            "Incineroar", "252/4/0/0/252/0", "Careful",
-            "Flutter Mane", "4/0/0/252/0/252", "Timid"
+            "Incineroar", "252/4/0/0/252/0", "Careful", "Flutter Mane", "4/0/0/252/0/252", "Timid"
         )
 
         assert result["faster"] == "Flutter Mane"
@@ -100,8 +112,7 @@ class TestCompareSpeeds:
         mock_speed.side_effect = [100, 100]
 
         result = compare_speeds(
-            "Pokemon1", "252/0/0/0/0/252", "Jolly",
-            "Pokemon2", "252/0/0/0/0/252", "Jolly"
+            "Pokemon1", "252/0/0/0/0/252", "Jolly", "Pokemon2", "252/0/0/0/0/252", "Jolly"
         )
 
         assert result["faster"] is None
@@ -114,8 +125,7 @@ class TestCompareSpeeds:
         mock_speed.side_effect = [205, None]
 
         result = compare_speeds(
-            "Flutter Mane", "4/0/0/252/0/252", "Timid",
-            "NotAPokemon", "252/252/4/0/0/0", "Adamant"
+            "Flutter Mane", "4/0/0/252/0/252", "Timid", "NotAPokemon", "252/252/4/0/0/0", "Adamant"
         )
 
         assert "error" in result

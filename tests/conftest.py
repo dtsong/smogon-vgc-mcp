@@ -54,13 +54,25 @@ def sample_incineroar_stats() -> PokemonStats:
         spreads=[
             EVSpread(
                 nature="Careful",
-                hp=252, atk=4, def_=0, spa=0, spd=252, spe=0,
-                count=15000, percent=30.0
+                hp=252,
+                atk=4,
+                def_=0,
+                spa=0,
+                spd=252,
+                spe=0,
+                count=15000,
+                percent=30.0,
             ),
             EVSpread(
                 nature="Adamant",
-                hp=252, atk=252, def_=0, spa=0, spd=4, spe=0,
-                count=10000, percent=20.0
+                hp=252,
+                atk=252,
+                def_=0,
+                spa=0,
+                spd=4,
+                spe=0,
+                count=10000,
+                percent=20.0,
             ),
         ],
         tera_types=[
@@ -70,7 +82,10 @@ def sample_incineroar_stats() -> PokemonStats:
         checks_counters=[
             CheckCounter(
                 counter="Urshifu-Rapid-Strike",
-                score=55.0, win_percent=60.0, ko_percent=35.0, switch_percent=25.0
+                score=55.0,
+                win_percent=60.0,
+                ko_percent=35.0,
+                switch_percent=25.0,
             ),
         ],
     )
@@ -103,8 +118,14 @@ def sample_flutter_mane_stats() -> PokemonStats:
         spreads=[
             EVSpread(
                 nature="Timid",
-                hp=4, atk=0, def_=0, spa=252, spd=0, spe=252,
-                count=30000, percent=57.7
+                hp=4,
+                atk=0,
+                def_=0,
+                spa=252,
+                spd=0,
+                spe=252,
+                count=30000,
+                percent=57.7,
             ),
         ],
     )
@@ -150,16 +171,40 @@ def sample_team() -> Team:
         pokepaste_url="https://pokepast.es/abc123",
         pokemon=[
             TeamPokemon(
-                slot=1, pokemon="Incineroar", item="Safety Goggles",
-                ability="Intimidate", tera_type="Ghost", nature="Careful",
-                hp_ev=252, atk_ev=4, def_ev=0, spa_ev=0, spd_ev=252, spe_ev=0,
-                move1="Fake Out", move2="Flare Blitz", move3="Parting Shot", move4="Knock Off"
+                slot=1,
+                pokemon="Incineroar",
+                item="Safety Goggles",
+                ability="Intimidate",
+                tera_type="Ghost",
+                nature="Careful",
+                hp_ev=252,
+                atk_ev=4,
+                def_ev=0,
+                spa_ev=0,
+                spd_ev=252,
+                spe_ev=0,
+                move1="Fake Out",
+                move2="Flare Blitz",
+                move3="Parting Shot",
+                move4="Knock Off",
             ),
             TeamPokemon(
-                slot=2, pokemon="Flutter Mane", item="Booster Energy",
-                ability="Protosynthesis", tera_type="Fairy", nature="Timid",
-                hp_ev=4, atk_ev=0, def_ev=0, spa_ev=252, spd_ev=0, spe_ev=252,
-                move1="Moonblast", move2="Shadow Ball", move3="Protect", move4="Dazzling Gleam"
+                slot=2,
+                pokemon="Flutter Mane",
+                item="Booster Energy",
+                ability="Protosynthesis",
+                tera_type="Fairy",
+                nature="Timid",
+                hp_ev=4,
+                atk_ev=0,
+                def_ev=0,
+                spa_ev=252,
+                spd_ev=0,
+                spe_ev=252,
+                move1="Moonblast",
+                move2="Shadow Ball",
+                move3="Protect",
+                move4="Dazzling Gleam",
             ),
         ],
     )

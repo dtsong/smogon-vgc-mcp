@@ -1,7 +1,6 @@
 """Tests for fetcher/moveset.py - Moveset data parsing."""
 
 
-
 class TestParsePokemonBlocks:
     """Tests for parse_pokemon_blocks function."""
 

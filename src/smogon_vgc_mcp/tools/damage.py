@@ -14,6 +14,7 @@ from smogon_vgc_mcp.utils import (
     ValidationError,
     make_error_response,
     validate_ev_spread,
+    validate_move_name,
     validate_nature,
     validate_pokemon_name,
     validate_stat_boost,
@@ -93,6 +94,7 @@ def register_damage_tools(mcp: FastMCP) -> None:
             validate_pokemon_name(defender)
             validate_ev_spread(defender_evs)
             validate_nature(defender_nature)
+            move = validate_move_name(move)
             if attacker_tera:
                 validate_type_name(attacker_tera)
             validate_weather(weather)
@@ -201,10 +203,16 @@ def register_damage_tools(mcp: FastMCP) -> None:
                 raise ValidationError("pokemon1_moves must be a non-empty list")
             if len(pokemon1_moves) > 4:
                 raise ValidationError("pokemon1_moves cannot have more than 4 moves")
+            for i, mv in enumerate(pokemon1_moves):
+                if mv:
+                    pokemon1_moves[i] = validate_move_name(mv)
             if not isinstance(pokemon2_moves, list) or len(pokemon2_moves) == 0:
                 raise ValidationError("pokemon2_moves must be a non-empty list")
             if len(pokemon2_moves) > 4:
                 raise ValidationError("pokemon2_moves cannot have more than 4 moves")
+            for i, mv in enumerate(pokemon2_moves):
+                if mv:
+                    pokemon2_moves[i] = validate_move_name(mv)
         except ValidationError as e:
             return make_error_response(e.message, hint=e.hint)
 
@@ -316,6 +324,7 @@ def register_damage_tools(mcp: FastMCP) -> None:
             validate_pokemon_name(defender)
             validate_ev_spread(defender_evs)
             validate_nature(defender_nature)
+            move = validate_move_name(move)
         except ValidationError as e:
             return make_error_response(e.message, hint=e.hint)
 

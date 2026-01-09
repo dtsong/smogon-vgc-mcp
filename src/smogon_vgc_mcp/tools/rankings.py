@@ -13,6 +13,7 @@ from smogon_vgc_mcp.utils import (
     validate_elo_bracket,
     validate_format_code,
     validate_limit,
+    validate_month,
 )
 
 
@@ -45,6 +46,7 @@ def register_rankings_tools(mcp: FastMCP) -> None:
         """
         try:
             validate_format_code(format)
+            month = validate_month(month)
             validate_elo_bracket(elo)
             limit = validate_limit(limit, max_limit=RANKINGS_MAX_LIMIT)
         except ValidationError as e:
@@ -180,6 +182,7 @@ def register_rankings_tools(mcp: FastMCP) -> None:
         """
         try:
             validate_format_code(format)
+            month = validate_month(month)
             if not pokemon or not pokemon.strip():
                 raise ValidationError("Pokemon name cannot be empty")
         except ValidationError as e:
