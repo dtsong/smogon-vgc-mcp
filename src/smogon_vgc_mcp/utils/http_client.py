@@ -8,15 +8,16 @@ This module consolidates HTTP fetching patterns from:
 - fetcher/pokepaste.py
 """
 
-import logging
-
 import httpx
 
-logger = logging.getLogger(__name__)
+from smogon_vgc_mcp.logging import get_logger, log_http_request
+
+logger = get_logger(__name__)
 
 DEFAULT_TIMEOUT = 60.0
 
 
+@log_http_request
 async def fetch_json(url: str, timeout: float = DEFAULT_TIMEOUT) -> dict | None:
     """Fetch and parse JSON from a URL.
 
@@ -37,6 +38,7 @@ async def fetch_json(url: str, timeout: float = DEFAULT_TIMEOUT) -> dict | None:
             return None
 
 
+@log_http_request
 async def fetch_text(
     url: str,
     timeout: float = DEFAULT_TIMEOUT,

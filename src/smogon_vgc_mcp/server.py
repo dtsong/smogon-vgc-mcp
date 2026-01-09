@@ -2,6 +2,7 @@
 
 from mcp.server.fastmcp import FastMCP
 
+from smogon_vgc_mcp.logging import LoggedFastMCP
 from smogon_vgc_mcp.resources import register_vgc_resources
 from smogon_vgc_mcp.tools import (
     register_admin_tools,
@@ -29,18 +30,20 @@ def create_server() -> FastMCP:
         "Use list_available_formats() to see supported formats.",
     )
 
-    # Register tools
-    register_pokemon_tools(mcp)
-    register_rankings_tools(mcp)
-    register_teambuilding_tools(mcp)
-    register_team_tools(mcp)
-    register_calculator_tools(mcp)
-    register_damage_tools(mcp)
-    register_ev_generator_tools(mcp)
-    register_pokedex_tools(mcp)
-    register_admin_tools(mcp)
+    logged_mcp = LoggedFastMCP(mcp)
 
-    # Register resources
+    # Register tools with logging wrapper
+    register_pokemon_tools(logged_mcp)
+    register_rankings_tools(logged_mcp)
+    register_teambuilding_tools(logged_mcp)
+    register_team_tools(logged_mcp)
+    register_calculator_tools(logged_mcp)
+    register_damage_tools(logged_mcp)
+    register_ev_generator_tools(logged_mcp)
+    register_pokedex_tools(logged_mcp)
+    register_admin_tools(logged_mcp)
+
+    # Register resources (no logging needed for resources)
     register_vgc_resources(mcp)
 
     return mcp

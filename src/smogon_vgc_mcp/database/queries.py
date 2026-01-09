@@ -24,6 +24,7 @@ from smogon_vgc_mcp.database.models import (
     UsageRanking,
 )
 from smogon_vgc_mcp.database.schema import get_connection
+from smogon_vgc_mcp.logging import log_database_operation
 
 
 async def get_snapshot(
@@ -82,6 +83,7 @@ async def get_all_snapshots(
             ]
 
 
+@log_database_operation("get_pokemon_stats")
 async def get_pokemon_stats(
     pokemon: str,
     format_code: str = "regf",
@@ -252,6 +254,7 @@ async def get_pokemon_stats(
         )
 
 
+@log_database_operation("get_usage_rankings")
 async def get_usage_rankings(
     format_code: str = "regf",
     month: str = "2025-12",
@@ -301,6 +304,7 @@ async def get_usage_rankings(
         return rankings
 
 
+@log_database_operation("search_pokemon")
 async def search_pokemon(
     query: str,
     format_code: str = "regf",
@@ -496,6 +500,7 @@ async def get_counters_for(
 # =============================================================================
 
 
+@log_database_operation("get_team")
 async def get_team(
     team_id: str,
     format_code: str | None = None,
@@ -567,6 +572,7 @@ async def get_team(
         )
 
 
+@log_database_operation("search_teams")
 async def search_teams(
     pokemon: str | None = None,
     tournament: str | None = None,
@@ -844,6 +850,7 @@ async def get_team_pokemon_count(db_path: Path | None = None) -> int:
 # =============================================================================
 
 
+@log_database_operation("get_dex_pokemon")
 async def get_dex_pokemon(
     pokemon_id: str,
     db_path: Path | None = None,
