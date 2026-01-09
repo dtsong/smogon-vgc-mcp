@@ -12,8 +12,11 @@ from smogon_vgc_mcp.utils import (
     MAX_SPREADS_DISPLAY,
     MAX_TEAMMATES_DISPLAY,
     MAX_TERA_TYPES_DISPLAY,
+    ValidationError,
     make_error_response,
     round_percent,
+    validate_elo_bracket,
+    validate_format_code,
 )
 
 
@@ -38,6 +41,12 @@ def register_pokemon_tools(mcp: FastMCP) -> None:
         Returns:
             Pokemon stats including usage, abilities, items, moves, teammates, spreads
         """
+        try:
+            validate_format_code(format)
+            validate_elo_bracket(elo)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         stats = await get_pokemon_stats(pokemon, format, month, elo)
 
         if not stats:
@@ -119,6 +128,14 @@ def register_pokemon_tools(mcp: FastMCP) -> None:
         Returns:
             List of matching Pokemon names
         """
+        try:
+            validate_format_code(format)
+            validate_elo_bracket(elo)
+            if not query or not query.strip():
+                raise ValidationError("Search query cannot be empty")
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         matches = await search_pokemon(query, format, month, elo)
 
         if not matches:

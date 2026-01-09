@@ -10,7 +10,16 @@ from smogon_vgc_mcp.database import (
     get_teammates,
 )
 from smogon_vgc_mcp.formats import DEFAULT_FORMAT
-from smogon_vgc_mcp.utils import cap_limit, make_error_response, round_percent
+from smogon_vgc_mcp.utils import (
+    ValidationError,
+    cap_limit,
+    make_error_response,
+    round_percent,
+    validate_elo_bracket,
+    validate_format_code,
+    validate_limit,
+    validate_type_name,
+)
 
 
 def register_teambuilding_tools(mcp: FastMCP) -> None:
@@ -36,6 +45,13 @@ def register_teambuilding_tools(mcp: FastMCP) -> None:
         Returns:
             List of most common teammates with usage percentages
         """
+        try:
+            validate_format_code(format)
+            validate_elo_bracket(elo)
+            limit = validate_limit(limit)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         limit = cap_limit(limit)
         teammates = await get_teammates(pokemon, format, month, elo, limit)
 
@@ -75,6 +91,15 @@ def register_teambuilding_tools(mcp: FastMCP) -> None:
         Returns:
             List of Pokemon that use this item most frequently
         """
+        try:
+            validate_format_code(format)
+            validate_elo_bracket(elo)
+            limit = validate_limit(limit)
+            if not item or not item.strip():
+                raise ValidationError("Item name cannot be empty")
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         limit = cap_limit(limit)
         results = await find_by_item(item, format, month, elo, limit)
 
@@ -114,6 +139,15 @@ def register_teambuilding_tools(mcp: FastMCP) -> None:
         Returns:
             List of Pokemon that use this move most frequently
         """
+        try:
+            validate_format_code(format)
+            validate_elo_bracket(elo)
+            limit = validate_limit(limit)
+            if not move or not move.strip():
+                raise ValidationError("Move name cannot be empty")
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         limit = cap_limit(limit)
         results = await find_by_move(move, format, month, elo, limit)
 
@@ -153,6 +187,14 @@ def register_teambuilding_tools(mcp: FastMCP) -> None:
         Returns:
             List of Pokemon that use this Tera Type most frequently
         """
+        try:
+            validate_format_code(format)
+            validate_elo_bracket(elo)
+            limit = validate_limit(limit)
+            tera_type = validate_type_name(tera_type)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         limit = cap_limit(limit)
         results = await find_by_tera_type(tera_type, format, month, elo, limit)
 
@@ -196,6 +238,13 @@ def register_teambuilding_tools(mcp: FastMCP) -> None:
         Returns:
             List of Pokemon that perform best against the target, with win rates
         """
+        try:
+            validate_format_code(format)
+            validate_elo_bracket(elo)
+            limit = validate_limit(limit)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         limit = cap_limit(limit)
         counters = await get_counters_for(pokemon, format, month, elo, limit)
 

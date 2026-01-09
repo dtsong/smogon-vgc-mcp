@@ -10,7 +10,13 @@ from smogon_vgc_mcp.database import (
     search_teams,
 )
 from smogon_vgc_mcp.formats import get_format
-from smogon_vgc_mcp.utils import cap_limit, make_error_response
+from smogon_vgc_mcp.utils import (
+    ValidationError,
+    cap_limit,
+    make_error_response,
+    validate_format_code,
+    validate_limit,
+)
 
 
 def register_team_tools(mcp: FastMCP) -> None:
@@ -26,6 +32,12 @@ def register_team_tools(mcp: FastMCP) -> None:
         Returns:
             Full team details including all Pokemon with EVs, moves, items, etc.
         """
+        if not team_id or not team_id.strip():
+            return make_error_response(
+                "Team ID cannot be empty",
+                hint="Team IDs start with format prefix + number (e.g., F123 for Reg F)",
+            )
+
         team = await get_team(team_id)
 
         if not team:
@@ -86,6 +98,13 @@ def register_team_tools(mcp: FastMCP) -> None:
                 hint="Provide pokemon, tournament, or owner parameter",
             )
 
+        try:
+            if format:
+                validate_format_code(format)
+            limit = validate_limit(limit)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         limit = cap_limit(limit)
         teams = await search_teams(
             pokemon=pokemon, tournament=tournament, owner=owner, format_code=format, limit=limit
@@ -145,6 +164,15 @@ def register_team_tools(mcp: FastMCP) -> None:
         Returns:
             List of EV spreads with frequency and team IDs
         """
+        try:
+            if not pokemon or not pokemon.strip():
+                raise ValidationError("Pokemon name cannot be empty")
+            if format:
+                validate_format_code(format)
+            limit = validate_limit(limit)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         limit = cap_limit(limit)
         spreads = await get_tournament_ev_spreads(pokemon, format, limit)
 
@@ -194,6 +222,17 @@ def register_team_tools(mcp: FastMCP) -> None:
         Returns:
             Teams containing all specified Pokemon
         """
+        try:
+            if not pokemon1 or not pokemon1.strip():
+                raise ValidationError("pokemon1 cannot be empty")
+            if not pokemon2 or not pokemon2.strip():
+                raise ValidationError("pokemon2 cannot be empty")
+            if format:
+                validate_format_code(format)
+            limit = validate_limit(limit)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         core = [pokemon1, pokemon2]
         if pokemon3:
             core.append(pokemon3)
@@ -240,6 +279,12 @@ def register_team_tools(mcp: FastMCP) -> None:
         Returns:
             Number of teams and Pokemon entries in the database
         """
+        try:
+            if format:
+                validate_format_code(format)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         team_count = await get_team_count(format)
 
         fmt_name = get_format(format).name if format else "All formats"

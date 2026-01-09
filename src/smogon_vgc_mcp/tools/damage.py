@@ -10,7 +10,17 @@ from smogon_vgc_mcp.calculator.damage import (
 from smogon_vgc_mcp.calculator.damage import (
     calculate_damage as calc_damage_internal,
 )
-from smogon_vgc_mcp.utils import make_error_response
+from smogon_vgc_mcp.utils import (
+    ValidationError,
+    make_error_response,
+    validate_ev_spread,
+    validate_nature,
+    validate_pokemon_name,
+    validate_stat_boost,
+    validate_terrain,
+    validate_type_name,
+    validate_weather,
+)
 
 
 def register_damage_tools(mcp: FastMCP) -> None:
@@ -68,6 +78,24 @@ def register_damage_tools(mcp: FastMCP) -> None:
         Returns:
             Damage calculation with range, percentages, and KO chance
         """
+        try:
+            validate_pokemon_name(attacker)
+            validate_ev_spread(attacker_evs)
+            validate_nature(attacker_nature)
+            validate_pokemon_name(defender)
+            validate_ev_spread(defender_evs)
+            validate_nature(defender_nature)
+            if attacker_tera:
+                validate_type_name(attacker_tera)
+            validate_weather(weather)
+            validate_terrain(terrain)
+            validate_stat_boost(attacker_atk_boost, "Attack")
+            validate_stat_boost(attacker_spa_boost, "Special Attack")
+            validate_stat_boost(defender_def_boost, "Defense")
+            validate_stat_boost(defender_spd_boost, "Special Defense")
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         attacker_boosts = None
         if attacker_atk_boost != 0 or attacker_spa_boost != 0:
             attacker_boosts = {"atk": attacker_atk_boost, "spa": attacker_spa_boost}
@@ -146,6 +174,24 @@ def register_damage_tools(mcp: FastMCP) -> None:
         Returns:
             Complete matchup analysis with damage calcs for all moves both ways
         """
+        try:
+            validate_pokemon_name(pokemon1)
+            validate_ev_spread(pokemon1_evs)
+            validate_nature(pokemon1_nature)
+            validate_pokemon_name(pokemon2)
+            validate_ev_spread(pokemon2_evs)
+            validate_nature(pokemon2_nature)
+            if not isinstance(pokemon1_moves, list) or len(pokemon1_moves) == 0:
+                raise ValidationError("pokemon1_moves must be a non-empty list")
+            if len(pokemon1_moves) > 4:
+                raise ValidationError("pokemon1_moves cannot have more than 4 moves")
+            if not isinstance(pokemon2_moves, list) or len(pokemon2_moves) == 0:
+                raise ValidationError("pokemon2_moves must be a non-empty list")
+            if len(pokemon2_moves) > 4:
+                raise ValidationError("pokemon2_moves cannot have more than 4 moves")
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         p1 = build_pokemon_dict(
             name=pokemon1,
             evs=pokemon1_evs,
@@ -241,6 +287,16 @@ def register_damage_tools(mcp: FastMCP) -> None:
         Returns:
             Damage comparison: normal vs after Intimidate
         """
+        try:
+            validate_pokemon_name(attacker)
+            validate_ev_spread(attacker_evs)
+            validate_nature(attacker_nature)
+            validate_pokemon_name(defender)
+            validate_ev_spread(defender_evs)
+            validate_nature(defender_nature)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         field = build_field_dict(game_type="Doubles")
 
         attacker_pokemon = build_pokemon_dict(

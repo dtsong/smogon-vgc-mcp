@@ -18,7 +18,16 @@ from smogon_vgc_mcp.calculator.ev_optimizer import (
     optimize_spread,
 )
 from smogon_vgc_mcp.calculator.stats import format_stats
-from smogon_vgc_mcp.utils import make_error_response
+from smogon_vgc_mcp.utils import (
+    ValidationError,
+    make_error_response,
+    validate_ev_spread,
+    validate_nature,
+    validate_pokemon_name,
+    validate_terrain,
+    validate_type_name,
+    validate_weather,
+)
 
 Goal = SurviveGoal | OHKOGoal | OutspeedGoal | UnderspeedGoal | MaximizeGoal
 
@@ -132,6 +141,15 @@ def register_ev_generator_tools(mcp: FastMCP) -> None:
         Returns:
             Optimized spread with goal results, calculated stats, and suggestions
         """
+        try:
+            validate_pokemon_name(pokemon)
+            if nature:
+                validate_nature(nature)
+            if tera_type:
+                validate_type_name(tera_type)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         parsed_goals = []
         for goal_dict in goals:
             goal = _parse_goal(goal_dict)
@@ -223,6 +241,19 @@ def register_ev_generator_tools(mcp: FastMCP) -> None:
         Returns:
             Minimum EVs needed and damage range after investment
         """
+        try:
+            validate_pokemon_name(pokemon)
+            validate_pokemon_name(attacker)
+            validate_nature(pokemon_nature)
+            validate_nature(attacker_nature)
+            validate_ev_spread(attacker_evs)
+            if attacker_tera:
+                validate_type_name(attacker_tera)
+            validate_weather(weather)
+            validate_terrain(terrain)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         goal = SurviveGoal(
             attacker=attacker,
             move=move,
@@ -289,6 +320,15 @@ def register_ev_generator_tools(mcp: FastMCP) -> None:
         Returns:
             Minimum EVs needed and damage range
         """
+        try:
+            validate_pokemon_name(pokemon)
+            validate_pokemon_name(defender)
+            validate_nature(pokemon_nature)
+            validate_nature(defender_nature)
+            validate_ev_spread(defender_evs)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         goal = OHKOGoal(
             defender=defender,
             move=move,
@@ -341,6 +381,15 @@ def register_ev_generator_tools(mcp: FastMCP) -> None:
         Returns:
             EVs needed and resulting speed stats
         """
+        try:
+            validate_pokemon_name(pokemon)
+            validate_pokemon_name(target)
+            validate_nature(pokemon_nature)
+            validate_nature(target_nature)
+            validate_ev_spread(target_evs)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         if goal_type.lower() == "underspeed":
             result = find_speed_evs_to_underspeed(
                 pokemon, target, target_evs, target_nature, pokemon_nature, 0

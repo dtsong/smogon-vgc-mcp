@@ -10,6 +10,12 @@ from smogon_vgc_mcp.fetcher import (
     fetch_and_store_pokepaste_teams,
 )
 from smogon_vgc_mcp.formats import DEFAULT_FORMAT, FORMATS, get_format
+from smogon_vgc_mcp.utils import (
+    ValidationError,
+    make_error_response,
+    validate_elo_bracket,
+    validate_format_code,
+)
 
 
 def register_admin_tools(mcp: FastMCP) -> None:
@@ -31,6 +37,13 @@ def register_admin_tools(mcp: FastMCP) -> None:
         Returns:
             Summary of fetched data
         """
+        try:
+            validate_format_code(format)
+            if elo is not None:
+                validate_elo_bracket(elo)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         months = [month] if month else None
         elos = [elo] if elo else None
 
@@ -56,6 +69,12 @@ def register_admin_tools(mcp: FastMCP) -> None:
         Returns:
             Information about available data snapshots
         """
+        try:
+            if format:
+                validate_format_code(format)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         snapshots = await get_all_snapshots(format)
 
         if not snapshots:
@@ -110,6 +129,13 @@ def register_admin_tools(mcp: FastMCP) -> None:
         Returns:
             Summary of fetched moveset data
         """
+        try:
+            validate_format_code(format)
+            if elo is not None:
+                validate_elo_bracket(elo)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         months = [month] if month else None
         elos = [elo] if elo else None
 
@@ -142,6 +168,11 @@ def register_admin_tools(mcp: FastMCP) -> None:
         Returns:
             Summary of fetched and parsed teams
         """
+        try:
+            validate_format_code(format)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         results = await fetch_and_store_pokepaste_teams(format_code=format, max_teams=max_teams)
 
         return {
@@ -165,6 +196,12 @@ def register_admin_tools(mcp: FastMCP) -> None:
         Returns:
             Information about cached tournament team data
         """
+        try:
+            if format:
+                validate_format_code(format)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         team_count = await get_team_count(format)
 
         if team_count == 0:

@@ -19,7 +19,12 @@ from smogon_vgc_mcp.database.queries import (
     search_dex_moves,
     search_dex_pokemon,
 )
-from smogon_vgc_mcp.utils import make_error_response
+from smogon_vgc_mcp.utils import (
+    ValidationError,
+    make_error_response,
+    validate_limit,
+    validate_type_name,
+)
 
 
 def register_pokedex_tools(mcp: FastMCP) -> None:
@@ -192,8 +197,14 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
         Returns:
             Type effectiveness multiplier and details
         """
-        # Parse defending types
         def_types = [t.strip() for t in defending_types.split(",")]
+
+        try:
+            validate_type_name(attacking_type)
+            for def_type in def_types:
+                validate_type_name(def_type)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
 
         result = await get_type_effectiveness(attacking_type, def_types)
 
@@ -236,6 +247,13 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
         Returns:
             List of matching entries with basic info
         """
+        try:
+            if not query or not query.strip():
+                raise ValidationError("Search query cannot be empty")
+            limit = validate_limit(limit, max_limit=50)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         cat = category.lower()
 
         if cat == "pokemon":
@@ -321,6 +339,12 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
         Returns:
             List of Pokemon with the specified type
         """
+        try:
+            pokemon_type = validate_type_name(pokemon_type)
+            limit = validate_limit(limit, max_limit=100)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         results = await get_pokemon_by_type(pokemon_type, limit)
 
         if not results:
@@ -358,6 +382,12 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
         Returns:
             List of moves ordered by base power (highest first)
         """
+        try:
+            move_type = validate_type_name(move_type)
+            limit = validate_limit(limit, max_limit=100)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         results = await get_moves_by_type(move_type, category, limit)
 
         if not results:

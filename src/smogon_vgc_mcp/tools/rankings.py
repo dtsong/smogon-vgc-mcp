@@ -6,9 +6,13 @@ from smogon_vgc_mcp.database import get_pokemon_stats, get_usage_rankings
 from smogon_vgc_mcp.formats import DEFAULT_FORMAT, get_format
 from smogon_vgc_mcp.utils import (
     RANKINGS_MAX_LIMIT,
+    ValidationError,
     cap_limit,
     make_error_response,
     round_percent,
+    validate_elo_bracket,
+    validate_format_code,
+    validate_limit,
 )
 
 
@@ -33,6 +37,13 @@ def register_rankings_tools(mcp: FastMCP) -> None:
         Returns:
             List of top Pokemon with usage stats
         """
+        try:
+            validate_format_code(format)
+            validate_elo_bracket(elo)
+            limit = validate_limit(limit, max_limit=RANKINGS_MAX_LIMIT)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         limit = cap_limit(limit, RANKINGS_MAX_LIMIT)
         rankings = await get_usage_rankings(format, month, elo, limit)
 
@@ -72,6 +83,14 @@ def register_rankings_tools(mcp: FastMCP) -> None:
         Returns:
             Usage comparison between months
         """
+        try:
+            validate_format_code(format)
+            validate_elo_bracket(elo)
+            if not pokemon or not pokemon.strip():
+                raise ValidationError("Pokemon name cannot be empty")
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         fmt = get_format(format)
         months = fmt.available_months
 
@@ -139,6 +158,13 @@ def register_rankings_tools(mcp: FastMCP) -> None:
         Returns:
             Usage comparison across ELO brackets
         """
+        try:
+            validate_format_code(format)
+            if not pokemon or not pokemon.strip():
+                raise ValidationError("Pokemon name cannot be empty")
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         fmt = get_format(format)
         elos = fmt.available_elos
         results = {}

@@ -13,7 +13,17 @@ from smogon_vgc_mcp.calculator.types import (
     get_offensive_coverage,
 )
 from smogon_vgc_mcp.data.pokemon_data import get_base_stats
-from smogon_vgc_mcp.utils import make_error_response
+from smogon_vgc_mcp.utils import (
+    ValidationError,
+    make_error_response,
+    validate_ev_spread,
+    validate_iv_spread,
+    validate_level,
+    validate_nature,
+    validate_pokemon_list,
+    validate_pokemon_name,
+    validate_type_list,
+)
 
 
 def register_calculator_tools(mcp: FastMCP) -> None:
@@ -42,6 +52,15 @@ def register_calculator_tools(mcp: FastMCP) -> None:
         Returns:
             Calculated stats for HP, Atk, Def, SpA, SpD, Spe
         """
+        try:
+            validate_pokemon_name(pokemon)
+            validate_ev_spread(evs)
+            validate_iv_spread(ivs)
+            validate_nature(nature)
+            validate_level(level)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         base = get_base_stats(pokemon)
         if not base:
             return make_error_response(
@@ -86,6 +105,16 @@ def register_calculator_tools(mcp: FastMCP) -> None:
         Returns:
             Speed comparison with values and result
         """
+        try:
+            validate_pokemon_name(pokemon1)
+            validate_ev_spread(evs1)
+            validate_nature(nature1)
+            validate_pokemon_name(pokemon2)
+            validate_ev_spread(evs2)
+            validate_nature(nature2)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         return compare_speeds(pokemon1, evs1, nature1, pokemon2, evs2, nature2)
 
     @mcp.tool()
@@ -104,6 +133,13 @@ def register_calculator_tools(mcp: FastMCP) -> None:
         Returns:
             Lists of Pokemon this speed beats and loses to
         """
+        try:
+            validate_pokemon_name(pokemon)
+            validate_ev_spread(evs)
+            validate_nature(nature)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         speed = get_speed_stat(pokemon, evs, None, nature)
         if speed is None:
             return make_error_response(f"Could not calculate speed for '{pokemon}'")
@@ -121,6 +157,11 @@ def register_calculator_tools(mcp: FastMCP) -> None:
         Returns:
             Team type analysis including shared weaknesses and unresisted types
         """
+        try:
+            validate_pokemon_list(pokemon_list, min_size=1, max_size=6)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         return analyze_team_types(pokemon_list)
 
     @mcp.tool()
@@ -133,4 +174,9 @@ def register_calculator_tools(mcp: FastMCP) -> None:
         Returns:
             Coverage analysis showing what types are hit super-effectively
         """
+        try:
+            validate_type_list(move_types, min_size=1, max_size=4)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         return get_offensive_coverage(move_types)
