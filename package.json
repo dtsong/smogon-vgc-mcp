@@ -1,0 +1,9 @@
+{
+  "name": "smogon-vgc-mcp-calc",
+  "version": "1.0.0",
+  "description": "Node.js wrapper for @smogon/calc damage calculator",
+  "private": true,
+  "dependencies": {
+    "@smogon/calc": "^0.10.0"
+  }
+}

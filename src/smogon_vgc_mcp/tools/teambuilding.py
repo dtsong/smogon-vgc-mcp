@@ -1,0 +1,224 @@
+"""Team building tools for MCP server."""
+
+from mcp.server.fastmcp import FastMCP
+
+from smogon_vgc_mcp.database import (
+    find_by_item,
+    find_by_move,
+    find_by_tera_type,
+    get_counters_for,
+    get_teammates,
+)
+from smogon_vgc_mcp.formats import DEFAULT_FORMAT
+
+
+def register_teambuilding_tools(mcp: FastMCP) -> None:
+    """Register team building tools with the MCP server."""
+
+    @mcp.tool()
+    async def get_pokemon_teammates(
+        pokemon: str,
+        format: str = DEFAULT_FORMAT,
+        month: str = "2025-12",
+        elo: int = 1500,
+        limit: int = 10,
+    ) -> dict:
+        """Get the most common teammates for a Pokemon.
+
+        Args:
+            pokemon: Pokemon name (e.g., "Incineroar")
+            format: VGC format code (e.g., "regf")
+            month: Stats month
+            elo: ELO bracket
+            limit: Number of teammates to return
+
+        Returns:
+            List of most common teammates with usage percentages
+        """
+        limit = min(limit, 20)
+        teammates = await get_teammates(pokemon, format, month, elo, limit)
+
+        if not teammates:
+            return {
+                "error": f"No teammate data found for '{pokemon}'",
+                "hint": "Check if the Pokemon name is correct or if data exists for this period",
+            }
+
+        return {
+            "pokemon": pokemon,
+            "format": format,
+            "month": month,
+            "elo": elo,
+            "teammates": [
+                {"teammate": t.teammate, "percent": round(t.percent, 1)} for t in teammates
+            ],
+        }
+
+    @mcp.tool()
+    async def find_pokemon_by_item(
+        item: str,
+        format: str = DEFAULT_FORMAT,
+        month: str = "2025-12",
+        elo: int = 1500,
+        limit: int = 10,
+    ) -> dict:
+        """Find Pokemon that commonly use a specific item.
+
+        Args:
+            item: Item name (e.g., "assaultvest", "choicescarf")
+            format: VGC format code (e.g., "regf")
+            month: Stats month
+            elo: ELO bracket
+            limit: Number of Pokemon to return
+
+        Returns:
+            List of Pokemon that use this item most frequently
+        """
+        limit = min(limit, 20)
+        results = await find_by_item(item, format, month, elo, limit)
+
+        if not results:
+            return {
+                "error": f"No Pokemon found using '{item}'",
+                "hint": "Item names are lowercase without spaces "
+                "(e.g., 'assaultvest', 'choicescarf')",
+            }
+
+        return {
+            "item": item,
+            "format": format,
+            "month": month,
+            "elo": elo,
+            "pokemon": [
+                {"pokemon": r["pokemon"], "percent": round(r["percent"], 1)} for r in results
+            ],
+        }
+
+    @mcp.tool()
+    async def find_pokemon_by_move(
+        move: str,
+        format: str = DEFAULT_FORMAT,
+        month: str = "2025-12",
+        elo: int = 1500,
+        limit: int = 10,
+    ) -> dict:
+        """Find Pokemon that commonly use a specific move.
+
+        Args:
+            move: Move name (e.g., "fakeout", "protect")
+            format: VGC format code (e.g., "regf")
+            month: Stats month
+            elo: ELO bracket
+            limit: Number of Pokemon to return
+
+        Returns:
+            List of Pokemon that use this move most frequently
+        """
+        limit = min(limit, 20)
+        results = await find_by_move(move, format, month, elo, limit)
+
+        if not results:
+            return {
+                "error": f"No Pokemon found using '{move}'",
+                "hint": "Move names are lowercase without spaces (e.g., 'fakeout', 'protect')",
+            }
+
+        return {
+            "move": move,
+            "format": format,
+            "month": month,
+            "elo": elo,
+            "pokemon": [
+                {"pokemon": r["pokemon"], "percent": round(r["percent"], 1)} for r in results
+            ],
+        }
+
+    @mcp.tool()
+    async def find_pokemon_by_tera(
+        tera_type: str,
+        format: str = DEFAULT_FORMAT,
+        month: str = "2025-12",
+        elo: int = 1500,
+        limit: int = 10,
+    ) -> dict:
+        """Find Pokemon that commonly use a specific Tera Type.
+
+        Args:
+            tera_type: Tera Type name (e.g., "Fairy", "Ghost", "Grass")
+            format: VGC format code (e.g., "regf")
+            month: Stats month
+            elo: ELO bracket
+            limit: Number of Pokemon to return
+
+        Returns:
+            List of Pokemon that use this Tera Type most frequently
+        """
+        limit = min(limit, 20)
+        results = await find_by_tera_type(tera_type, format, month, elo, limit)
+
+        if not results:
+            return {
+                "error": f"No Pokemon found using Tera {tera_type}",
+                "hint": "Tera Type data requires running refresh_moveset_data first. "
+                "Type names are capitalized (e.g., 'Fairy', 'Ghost').",
+            }
+
+        return {
+            "tera_type": tera_type,
+            "format": format,
+            "month": month,
+            "elo": elo,
+            "pokemon": [
+                {"pokemon": r["pokemon"], "percent": round(r["percent"], 1)} for r in results
+            ],
+        }
+
+    @mcp.tool()
+    async def get_pokemon_counters(
+        pokemon: str,
+        format: str = DEFAULT_FORMAT,
+        month: str = "2025-12",
+        elo: int = 1500,
+        limit: int = 10,
+    ) -> dict:
+        """Get Pokemon that counter a specific Pokemon.
+
+        Based on Smogon's checks and counters data, which tracks win rates
+        and how often the target Pokemon is KOed or forced to switch.
+
+        Args:
+            pokemon: Pokemon name to find counters for (e.g., "Flutter Mane")
+            format: VGC format code (e.g., "regf")
+            month: Stats month
+            elo: ELO bracket
+            limit: Number of counters to return
+
+        Returns:
+            List of Pokemon that perform best against the target, with win rates
+        """
+        limit = min(limit, 20)
+        counters = await get_counters_for(pokemon, format, month, elo, limit)
+
+        if not counters:
+            return {
+                "error": f"No counter data found for '{pokemon}'",
+                "hint": "Counter data requires running refresh_moveset_data first. "
+                "Check if the Pokemon name is correct.",
+            }
+
+        return {
+            "pokemon": pokemon,
+            "format": format,
+            "month": month,
+            "elo": elo,
+            "counters": [
+                {
+                    "pokemon": c.counter,
+                    "score": round(c.score, 1),
+                    "win_percent": round(c.win_percent, 1),
+                    "ko_percent": round(c.ko_percent, 1),
+                    "switch_percent": round(c.switch_percent, 1),
+                }
+                for c in counters
+            ],
+        }
