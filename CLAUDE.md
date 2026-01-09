@@ -152,3 +152,75 @@ npx @modelcontextprotocol/inspector uv run smogon-vgc-mcp
 - Async functions for I/O operations (database, HTTP)
 - Docstrings for all public functions
 - Follow PEP 8 (enforced by ruff)
+
+---
+
+# VGC Multi-Agent Teambuilder
+
+## Overview
+
+Multi-agent system for automated VGC teambuilding using Claude and MCP tools. Four specialized agents collaborate to design, validate, critique, and optimize competitive teams.
+
+## Architecture
+
+```
+Architect → Calculator → Critic → (iterate if needed) → Refiner → Final Team
+```
+
+**Agents:**
+- **Architect** - Designs team structure, selects Pokemon, defines game plan
+- **Calculator** - Validates with damage calculations, identifies benchmarks
+- **Critic** - Stress-tests for weaknesses, bad matchups, failure modes
+- **Refiner** - Optimizes EV spreads, outputs Showdown format
+
+## CLI Usage
+
+```bash
+# Set API key
+export ANTHROPIC_API_KEY="your-key"
+
+# Build a team
+uv run vgc-build "Build a sun team with Koraidon"
+
+# Verbose mode (show tool calls)
+uv run vgc-build "Counter Flutter Mane" --verbose
+
+# Custom MCP command
+uv run vgc-build "Rain team" --mcp-command "uv run smogon-vgc-mcp"
+```
+
+## Python API
+
+```python
+from vgc_agent import build_team, TeambuilderOrchestrator
+
+# Simple usage
+state = await build_team("Build a rain team")
+print(state.final_team)
+
+# With streaming events for UI
+orchestrator = TeambuilderOrchestrator(["uv", "run", "smogon-vgc-mcp"])
+await orchestrator.connect()
+
+async for event in orchestrator.build_team_streaming("Build a sun team"):
+    print(f"{event.type}: {event.data}")
+
+await orchestrator.disconnect()
+```
+
+## Event Types
+
+For UI integration, the system emits events:
+- `SESSION_STARTED` / `SESSION_COMPLETED` / `SESSION_FAILED`
+- `PHASE_STARTED` / `PHASE_COMPLETED`
+- `AGENT_TOOL_CALL` / `AGENT_TOOL_RESULT`
+- `TEAM_UPDATED` / `WEAKNESS_FOUND`
+- `ITERATION_STARTED` / `ITERATION_COMPLETED`
+
+## Project Structure
+
+- `src/vgc_agent/core/` - Types, events, MCP client
+- `src/vgc_agent/agents/` - Specialized agent implementations
+- `src/vgc_agent/orchestrator.py` - Pipeline coordination
+- `src/vgc_agent/cli.py` - Command-line interface
+- `tests/vgc_agent/` - Unit tests
