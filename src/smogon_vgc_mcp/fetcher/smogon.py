@@ -5,10 +5,10 @@ import re
 from pathlib import Path
 
 import aiosqlite
-import httpx
 
 from smogon_vgc_mcp.database.schema import get_connection, get_db_path, init_database
 from smogon_vgc_mcp.formats import DEFAULT_FORMAT, get_format, get_smogon_stats_url
+from smogon_vgc_mcp.utils import fetch_json
 
 
 async def fetch_vgc_data(format_code: str, month: str, elo: int) -> dict | None:
@@ -23,15 +23,7 @@ async def fetch_vgc_data(format_code: str, month: str, elo: int) -> dict | None:
         Parsed JSON data or None if fetch failed
     """
     url = get_smogon_stats_url(format_code, month, elo)
-
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        try:
-            response = await client.get(url)
-            response.raise_for_status()
-            return response.json()
-        except httpx.HTTPError as e:
-            print(f"Failed to fetch {url}: {e}")
-            return None
+    return await fetch_json(url)
 
 
 def parse_spread(spread_str: str) -> dict | None:

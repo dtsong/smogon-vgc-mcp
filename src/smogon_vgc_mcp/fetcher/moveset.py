@@ -4,10 +4,10 @@ import re
 from pathlib import Path
 
 import aiosqlite
-import httpx
 
 from smogon_vgc_mcp.database.schema import get_connection, get_db_path, init_database
 from smogon_vgc_mcp.formats import DEFAULT_FORMAT, get_format, get_moveset_url
+from smogon_vgc_mcp.utils import fetch_text
 
 
 async def fetch_moveset_text(format_code: str, month: str, elo: int) -> str | None:
@@ -22,15 +22,7 @@ async def fetch_moveset_text(format_code: str, month: str, elo: int) -> str | No
         Raw text content or None if fetch failed
     """
     url = get_moveset_url(format_code, month, elo)
-
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        try:
-            response = await client.get(url)
-            response.raise_for_status()
-            return response.text
-        except httpx.HTTPError as e:
-            print(f"Failed to fetch {url}: {e}")
-            return None
+    return await fetch_text(url)
 
 
 def parse_pokemon_blocks(text: str) -> list[tuple[str, str]]:

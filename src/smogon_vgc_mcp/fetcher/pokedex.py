@@ -5,9 +5,9 @@ import re
 from pathlib import Path
 
 import aiosqlite
-import httpx
 
 from smogon_vgc_mcp.database.schema import get_connection, get_db_path, init_database
+from smogon_vgc_mcp.utils import fetch_json, fetch_text
 
 # Pokemon Showdown data URLs
 POKEDEX_JSON_URL = "https://play.pokemonshowdown.com/data/pokedex.json"
@@ -199,30 +199,6 @@ ALL_TYPES = [
     "Steel",
     "Fairy",
 ]
-
-
-async def fetch_json(url: str) -> dict | None:
-    """Fetch JSON data from a URL."""
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        try:
-            response = await client.get(url)
-            response.raise_for_status()
-            return response.json()
-        except httpx.HTTPError as e:
-            print(f"Failed to fetch {url}: {e}")
-            return None
-
-
-async def fetch_text(url: str) -> str | None:
-    """Fetch text content from a URL."""
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        try:
-            response = await client.get(url)
-            response.raise_for_status()
-            return response.text
-        except httpx.HTTPError as e:
-            print(f"Failed to fetch {url}: {e}")
-            return None
 
 
 def _extract_balanced_brace_content(content: str, start: int) -> tuple[str, int]:

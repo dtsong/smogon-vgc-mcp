@@ -2,19 +2,8 @@
 
 import re
 
-import httpx
-
 from smogon_vgc_mcp.database.models import TeamPokemon
-
-# Stat name mappings
-STAT_MAP = {
-    "HP": "hp",
-    "Atk": "atk",
-    "Def": "def",
-    "SpA": "spa",
-    "SpD": "spd",
-    "Spe": "spe",
-}
+from smogon_vgc_mcp.utils import fetch_text, parse_ev_string, parse_iv_string
 
 
 async def fetch_pokepaste(url: str) -> str | None:
@@ -32,65 +21,7 @@ async def fetch_pokepaste(url: str) -> str | None:
     else:
         raw_url = url
 
-    async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
-        try:
-            response = await client.get(raw_url)
-            response.raise_for_status()
-            return response.text
-        except httpx.HTTPError as e:
-            print(f"Failed to fetch pokepaste {url}: {e}")
-            return None
-
-
-def parse_evs(line: str) -> dict[str, int]:
-    """Parse an EVs line like 'EVs: 252 HP / 4 Def / 252 SpA'.
-
-    Returns:
-        Dict mapping stat names to values (e.g., {"hp": 252, "def": 4, "spa": 252})
-    """
-    evs = {"hp": 0, "atk": 0, "def": 0, "spa": 0, "spd": 0, "spe": 0}
-
-    # Remove "EVs:" prefix
-    line = line.replace("EVs:", "").strip()
-
-    # Split by /
-    parts = [p.strip() for p in line.split("/")]
-
-    for part in parts:
-        # Match "252 HP" or "4 Def" etc
-        match = re.match(r"(\d+)\s+(\w+)", part)
-        if match:
-            value = int(match.group(1))
-            stat_name = match.group(2)
-            if stat_name in STAT_MAP:
-                evs[STAT_MAP[stat_name]] = value
-
-    return evs
-
-
-def parse_ivs(line: str) -> dict[str, int]:
-    """Parse an IVs line like 'IVs: 0 Atk'.
-
-    Returns:
-        Dict mapping stat names to values (defaults to 31 for unspecified)
-    """
-    ivs = {"hp": 31, "atk": 31, "def": 31, "spa": 31, "spd": 31, "spe": 31}
-
-    # Remove "IVs:" prefix
-    line = line.replace("IVs:", "").strip()
-
-    # Split by /
-    parts = [p.strip() for p in line.split("/")]
-
-    for part in parts:
-        match = re.match(r"(\d+)\s+(\w+)", part)
-        if match:
-            value = int(match.group(1))
-            stat_name = match.group(2)
-            if stat_name in STAT_MAP:
-                ivs[STAT_MAP[stat_name]] = value
-
-    return ivs
+    return await fetch_text(raw_url, timeout=30.0, verify=False)
 
 
 def parse_pokepaste(text: str) -> list[TeamPokemon]:
@@ -151,7 +82,7 @@ def parse_pokepaste(text: str) -> list[TeamPokemon]:
             elif line.startswith("Tera Type:"):
                 pokemon.tera_type = line.replace("Tera Type:", "").strip()
             elif line.startswith("EVs:"):
-                evs = parse_evs(line)
+                evs = parse_ev_string(line)
                 pokemon.hp_ev = evs["hp"]
                 pokemon.atk_ev = evs["atk"]
                 pokemon.def_ev = evs["def"]
@@ -159,7 +90,7 @@ def parse_pokepaste(text: str) -> list[TeamPokemon]:
                 pokemon.spd_ev = evs["spd"]
                 pokemon.spe_ev = evs["spe"]
             elif line.startswith("IVs:"):
-                ivs = parse_ivs(line)
+                ivs = parse_iv_string(line)
                 pokemon.hp_iv = ivs["hp"]
                 pokemon.atk_iv = ivs["atk"]
                 pokemon.def_iv = ivs["def"]
@@ -171,15 +102,10 @@ def parse_pokepaste(text: str) -> list[TeamPokemon]:
             elif line.startswith("- "):
                 moves.append(line[2:].strip())
 
-        # Assign moves
-        if len(moves) >= 1:
-            pokemon.move1 = moves[0]
-        if len(moves) >= 2:
-            pokemon.move2 = moves[1]
-        if len(moves) >= 3:
-            pokemon.move3 = moves[2]
-        if len(moves) >= 4:
-            pokemon.move4 = moves[3]
+        # Assign moves (up to 4)
+        move_attrs = ["move1", "move2", "move3", "move4"]
+        for i, move in enumerate(moves[:4]):
+            setattr(pokemon, move_attrs[i], move)
 
         pokemon_list.append(pokemon)
 

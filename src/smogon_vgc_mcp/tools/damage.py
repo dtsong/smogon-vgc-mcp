@@ -8,6 +8,7 @@ from smogon_vgc_mcp.calculator.damage import (
     calculate_damage,
     calculate_damage_simple,
 )
+from smogon_vgc_mcp.utils import make_error_response
 
 
 def register_damage_tools(mcp: FastMCP) -> None:
@@ -96,7 +97,7 @@ def register_damage_tools(mcp: FastMCP) -> None:
         )
 
         if not result.get("success"):
-            return {"error": result.get("error", "Calculation failed")}
+            return make_error_response(result.get("error", "Calculation failed"))
 
         return {
             "description": result.get("description"),
@@ -367,7 +368,7 @@ def register_damage_tools(mcp: FastMCP) -> None:
         intimidated_result = calculate_damage(attacker_intimidated, defender_pokemon, move, field)
 
         if not normal_result.get("success") or not intimidated_result.get("success"):
-            return {"error": "Calculation failed"}
+            return make_error_response("Calculation failed")
 
         normal_min = normal_result.get("minPercent", 0)
         normal_max = normal_result.get("maxPercent", 0)

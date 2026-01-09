@@ -4,6 +4,12 @@ from mcp.server.fastmcp import FastMCP
 
 from smogon_vgc_mcp.database import get_pokemon_stats, get_usage_rankings
 from smogon_vgc_mcp.formats import DEFAULT_FORMAT, get_format
+from smogon_vgc_mcp.utils import (
+    RANKINGS_MAX_LIMIT,
+    cap_limit,
+    make_error_response,
+    round_percent,
+)
 
 
 def register_rankings_tools(mcp: FastMCP) -> None:
@@ -27,14 +33,14 @@ def register_rankings_tools(mcp: FastMCP) -> None:
         Returns:
             List of top Pokemon with usage stats
         """
-        limit = min(limit, 50)
+        limit = cap_limit(limit, RANKINGS_MAX_LIMIT)
         rankings = await get_usage_rankings(format, month, elo, limit)
 
         if not rankings:
-            return {
-                "error": f"No data found for {format} {month} at ELO {elo}",
-                "hint": "Try running refresh_data first to fetch stats",
-            }
+            return make_error_response(
+                f"No data found for {format} {month} at ELO {elo}",
+                hint="Try running refresh_data first to fetch stats",
+            )
 
         return {
             "format": format,
@@ -98,20 +104,20 @@ def register_rankings_tools(mcp: FastMCP) -> None:
 
         if first_stats:
             result[first_month] = {
-                "usage_percent": round(first_stats.usage_percent, 2),
+                "usage_percent": round_percent(first_stats.usage_percent, 2),
                 "raw_count": first_stats.raw_count,
             }
 
         if last_stats:
             result[last_month] = {
-                "usage_percent": round(last_stats.usage_percent, 2),
+                "usage_percent": round_percent(last_stats.usage_percent, 2),
                 "raw_count": last_stats.raw_count,
             }
 
         if first_stats and last_stats:
             change = last_stats.usage_percent - first_stats.usage_percent
             result["change"] = {
-                "usage_percent_change": round(change, 2),
+                "usage_percent_change": round_percent(change, 2),
                 "direction": "up" if change > 0 else "down" if change < 0 else "stable",
             }
 
@@ -141,7 +147,7 @@ def register_rankings_tools(mcp: FastMCP) -> None:
             stats = await get_pokemon_stats(pokemon, format, month, elo)
             if stats:
                 results[str(elo)] = {
-                    "usage_percent": round(stats.usage_percent, 2),
+                    "usage_percent": round_percent(stats.usage_percent, 2),
                     "raw_count": stats.raw_count,
                 }
             else:

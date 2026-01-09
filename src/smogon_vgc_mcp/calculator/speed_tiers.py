@@ -1,5 +1,7 @@
 """Speed tier analysis for VGC."""
 
+import math
+
 from smogon_vgc_mcp.calculator.stats import calculate_all_stats
 
 
@@ -130,16 +132,12 @@ SPEED_BENCHMARKS = {
 
 def get_min_speed(base_speed: int, level: int = 50) -> int:
     """Calculate minimum possible speed (0 EVs, 0 IV, negative nature)."""
-    import math
-
     raw = math.floor((2 * base_speed + 0 + 0) * level / 100) + 5
     return math.floor(raw * 0.9)
 
 
 def get_max_speed(base_speed: int, level: int = 50) -> int:
     """Calculate maximum possible speed (252 EVs, 31 IV, positive nature)."""
-    import math
-
     raw = math.floor((2 * base_speed + 31 + 63) * level / 100) + 5
     return math.floor(raw * 1.1)
 

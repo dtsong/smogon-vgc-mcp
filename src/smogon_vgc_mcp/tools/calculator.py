@@ -14,6 +14,7 @@ from smogon_vgc_mcp.calculator.types import (
     get_pokemon_weaknesses,
 )
 from smogon_vgc_mcp.data.pokemon_data import get_base_stats, get_pokemon_types
+from smogon_vgc_mcp.utils import make_error_response
 
 
 def register_calculator_tools(mcp: FastMCP) -> None:
@@ -41,14 +42,14 @@ def register_calculator_tools(mcp: FastMCP) -> None:
         """
         base = get_base_stats(pokemon)
         if not base:
-            return {
-                "error": f"Pokemon '{pokemon}' not found",
-                "hint": "Check spelling or try the full name",
-            }
+            return make_error_response(
+                f"Pokemon '{pokemon}' not found",
+                hint="Check spelling or try the full name",
+            )
 
         stats = calculate_all_stats(pokemon, evs, ivs, nature, level)
         if not stats:
-            return {"error": "Failed to calculate stats"}
+            return make_error_response("Failed to calculate stats")
 
         return {
             "pokemon": pokemon,
@@ -103,7 +104,7 @@ def register_calculator_tools(mcp: FastMCP) -> None:
         """
         speed = get_speed_stat(pokemon, evs, None, nature)
         if speed is None:
-            return {"error": f"Could not calculate speed for '{pokemon}'"}
+            return make_error_response(f"Could not calculate speed for '{pokemon}'")
 
         return find_speed_benchmarks(pokemon, speed)
 
@@ -143,7 +144,7 @@ def register_calculator_tools(mcp: FastMCP) -> None:
         """
         base = get_base_stats(pokemon)
         if not base:
-            return {"error": f"Pokemon '{pokemon}' not found"}
+            return make_error_response(f"Pokemon '{pokemon}' not found")
 
         types = get_pokemon_types(pokemon)
 

@@ -10,6 +10,7 @@ from smogon_vgc_mcp.database import (
     get_teammates,
 )
 from smogon_vgc_mcp.formats import DEFAULT_FORMAT
+from smogon_vgc_mcp.utils import cap_limit, make_error_response, round_percent
 
 
 def register_teambuilding_tools(mcp: FastMCP) -> None:
@@ -35,14 +36,14 @@ def register_teambuilding_tools(mcp: FastMCP) -> None:
         Returns:
             List of most common teammates with usage percentages
         """
-        limit = min(limit, 20)
+        limit = cap_limit(limit)
         teammates = await get_teammates(pokemon, format, month, elo, limit)
 
         if not teammates:
-            return {
-                "error": f"No teammate data found for '{pokemon}'",
-                "hint": "Check if the Pokemon name is correct or if data exists for this period",
-            }
+            return make_error_response(
+                f"No teammate data found for '{pokemon}'",
+                hint="Check if the Pokemon name is correct or if data exists for this period",
+            )
 
         return {
             "pokemon": pokemon,
@@ -50,7 +51,7 @@ def register_teambuilding_tools(mcp: FastMCP) -> None:
             "month": month,
             "elo": elo,
             "teammates": [
-                {"teammate": t.teammate, "percent": round(t.percent, 1)} for t in teammates
+                {"teammate": t.teammate, "percent": round_percent(t.percent)} for t in teammates
             ],
         }
 
@@ -74,15 +75,14 @@ def register_teambuilding_tools(mcp: FastMCP) -> None:
         Returns:
             List of Pokemon that use this item most frequently
         """
-        limit = min(limit, 20)
+        limit = cap_limit(limit)
         results = await find_by_item(item, format, month, elo, limit)
 
         if not results:
-            return {
-                "error": f"No Pokemon found using '{item}'",
-                "hint": "Item names are lowercase without spaces "
-                "(e.g., 'assaultvest', 'choicescarf')",
-            }
+            return make_error_response(
+                f"No Pokemon found using '{item}'",
+                hint="Item names are lowercase without spaces (e.g., 'assaultvest', 'choicescarf')",
+            )
 
         return {
             "item": item,
@@ -90,7 +90,7 @@ def register_teambuilding_tools(mcp: FastMCP) -> None:
             "month": month,
             "elo": elo,
             "pokemon": [
-                {"pokemon": r["pokemon"], "percent": round(r["percent"], 1)} for r in results
+                {"pokemon": r["pokemon"], "percent": round_percent(r["percent"])} for r in results
             ],
         }
 
@@ -114,14 +114,14 @@ def register_teambuilding_tools(mcp: FastMCP) -> None:
         Returns:
             List of Pokemon that use this move most frequently
         """
-        limit = min(limit, 20)
+        limit = cap_limit(limit)
         results = await find_by_move(move, format, month, elo, limit)
 
         if not results:
-            return {
-                "error": f"No Pokemon found using '{move}'",
-                "hint": "Move names are lowercase without spaces (e.g., 'fakeout', 'protect')",
-            }
+            return make_error_response(
+                f"No Pokemon found using '{move}'",
+                hint="Move names are lowercase without spaces (e.g., 'fakeout', 'protect')",
+            )
 
         return {
             "move": move,
@@ -129,7 +129,7 @@ def register_teambuilding_tools(mcp: FastMCP) -> None:
             "month": month,
             "elo": elo,
             "pokemon": [
-                {"pokemon": r["pokemon"], "percent": round(r["percent"], 1)} for r in results
+                {"pokemon": r["pokemon"], "percent": round_percent(r["percent"])} for r in results
             ],
         }
 
@@ -153,15 +153,15 @@ def register_teambuilding_tools(mcp: FastMCP) -> None:
         Returns:
             List of Pokemon that use this Tera Type most frequently
         """
-        limit = min(limit, 20)
+        limit = cap_limit(limit)
         results = await find_by_tera_type(tera_type, format, month, elo, limit)
 
         if not results:
-            return {
-                "error": f"No Pokemon found using Tera {tera_type}",
-                "hint": "Tera Type data requires running refresh_moveset_data first. "
+            return make_error_response(
+                f"No Pokemon found using Tera {tera_type}",
+                hint="Tera Type data requires running refresh_moveset_data first. "
                 "Type names are capitalized (e.g., 'Fairy', 'Ghost').",
-            }
+            )
 
         return {
             "tera_type": tera_type,
@@ -169,7 +169,7 @@ def register_teambuilding_tools(mcp: FastMCP) -> None:
             "month": month,
             "elo": elo,
             "pokemon": [
-                {"pokemon": r["pokemon"], "percent": round(r["percent"], 1)} for r in results
+                {"pokemon": r["pokemon"], "percent": round_percent(r["percent"])} for r in results
             ],
         }
 
@@ -196,15 +196,15 @@ def register_teambuilding_tools(mcp: FastMCP) -> None:
         Returns:
             List of Pokemon that perform best against the target, with win rates
         """
-        limit = min(limit, 20)
+        limit = cap_limit(limit)
         counters = await get_counters_for(pokemon, format, month, elo, limit)
 
         if not counters:
-            return {
-                "error": f"No counter data found for '{pokemon}'",
-                "hint": "Counter data requires running refresh_moveset_data first. "
+            return make_error_response(
+                f"No counter data found for '{pokemon}'",
+                hint="Counter data requires running refresh_moveset_data first. "
                 "Check if the Pokemon name is correct.",
-            }
+            )
 
         return {
             "pokemon": pokemon,
@@ -214,10 +214,10 @@ def register_teambuilding_tools(mcp: FastMCP) -> None:
             "counters": [
                 {
                     "pokemon": c.counter,
-                    "score": round(c.score, 1),
-                    "win_percent": round(c.win_percent, 1),
-                    "ko_percent": round(c.ko_percent, 1),
-                    "switch_percent": round(c.switch_percent, 1),
+                    "score": round_percent(c.score),
+                    "win_percent": round_percent(c.win_percent),
+                    "ko_percent": round_percent(c.ko_percent),
+                    "switch_percent": round_percent(c.switch_percent),
                 }
                 for c in counters
             ],

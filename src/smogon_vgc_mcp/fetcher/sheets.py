@@ -6,11 +6,11 @@ import io
 import re
 
 import aiosqlite
-import httpx
 
 from smogon_vgc_mcp.database.schema import get_connection, get_db_path, init_database
 from smogon_vgc_mcp.fetcher.pokepaste import fetch_pokepaste, parse_pokepaste
 from smogon_vgc_mcp.formats import DEFAULT_FORMAT, get_format, get_sheet_csv_url
+from smogon_vgc_mcp.utils import fetch_text
 
 
 async def fetch_teams_from_sheet(format_code: str) -> list[dict]:
@@ -29,10 +29,10 @@ async def fetch_teams_from_sheet(format_code: str) -> list[dict]:
         print(f"No Google Sheet configured for {fmt.name}")
         return []
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        response = await client.get(sheet_url)
-        response.raise_for_status()
-        csv_text = response.text
+    csv_text = await fetch_text(sheet_url)
+    if not csv_text:
+        print(f"Failed to fetch sheet for {fmt.name}")
+        return []
 
     # Parse CSV as raw rows (no header inference - the sheet has complex multi-row headers)
     reader = csv.reader(io.StringIO(csv_text))

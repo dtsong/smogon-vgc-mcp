@@ -4,6 +4,17 @@ from mcp.server.fastmcp import FastMCP
 
 from smogon_vgc_mcp.database import get_pokemon_stats, search_pokemon
 from smogon_vgc_mcp.formats import DEFAULT_FORMAT
+from smogon_vgc_mcp.utils import (
+    MAX_ABILITIES_DISPLAY,
+    MAX_COUNTERS_DISPLAY,
+    MAX_ITEMS_DISPLAY,
+    MAX_MOVES_DISPLAY,
+    MAX_SPREADS_DISPLAY,
+    MAX_TEAMMATES_DISPLAY,
+    MAX_TERA_TYPES_DISPLAY,
+    make_error_response,
+    round_percent,
+)
 
 
 def register_pokemon_tools(mcp: FastMCP) -> None:
@@ -30,42 +41,50 @@ def register_pokemon_tools(mcp: FastMCP) -> None:
         stats = await get_pokemon_stats(pokemon, format, month, elo)
 
         if not stats:
-            return {
-                "error": f"Pokemon '{pokemon}' not found for {format} {month} at ELO {elo}",
-                "hint": "Try using find_pokemon to find the correct name",
-            }
+            return make_error_response(
+                f"Pokemon '{pokemon}' not found for {format} {month} at ELO {elo}",
+                hint="Try using find_pokemon to find the correct name",
+            )
 
         result = {
             "pokemon": stats.pokemon,
             "format": format,
             "month": month,
             "elo": elo,
-            "usage_percent": round(stats.usage_percent, 2),
+            "usage_percent": round_percent(stats.usage_percent, 2),
             "raw_count": stats.raw_count,
             "viability_ceiling": stats.viability_ceiling,
             "abilities": [
-                {"ability": a.ability, "percent": round(a.percent, 1)} for a in stats.abilities[:5]
+                {"ability": a.ability, "percent": round_percent(a.percent)}
+                for a in stats.abilities[:MAX_ABILITIES_DISPLAY]
             ],
-            "items": [{"item": i.item, "percent": round(i.percent, 1)} for i in stats.items[:10]],
-            "moves": [{"move": m.move, "percent": round(m.percent, 1)} for m in stats.moves[:10]],
+            "items": [
+                {"item": i.item, "percent": round_percent(i.percent)}
+                for i in stats.items[:MAX_ITEMS_DISPLAY]
+            ],
+            "moves": [
+                {"move": m.move, "percent": round_percent(m.percent)}
+                for m in stats.moves[:MAX_MOVES_DISPLAY]
+            ],
             "teammates": [
-                {"teammate": t.teammate, "percent": round(t.percent, 1)}
-                for t in stats.teammates[:8]
+                {"teammate": t.teammate, "percent": round_percent(t.percent)}
+                for t in stats.teammates[:MAX_TEAMMATES_DISPLAY]
             ],
             "spreads": [
                 {
                     "nature": s.nature,
                     "evs": f"{s.hp}/{s.atk}/{s.def_}/{s.spa}/{s.spd}/{s.spe}",
-                    "percent": round(s.percent, 1),
+                    "percent": round_percent(s.percent),
                 }
-                for s in stats.spreads[:5]
+                for s in stats.spreads[:MAX_SPREADS_DISPLAY]
             ],
         }
 
         # Add tera types if available (from moveset data)
         if stats.tera_types:
             result["tera_types"] = [
-                {"type": t.tera_type, "percent": round(t.percent, 1)} for t in stats.tera_types[:5]
+                {"type": t.tera_type, "percent": round_percent(t.percent)}
+                for t in stats.tera_types[:MAX_TERA_TYPES_DISPLAY]
             ]
 
         # Add checks/counters if available (from moveset data)
@@ -73,11 +92,11 @@ def register_pokemon_tools(mcp: FastMCP) -> None:
             result["checks_counters"] = [
                 {
                     "pokemon": c.counter,
-                    "score": round(c.score, 1),
-                    "ko_percent": round(c.ko_percent, 1),
-                    "switch_percent": round(c.switch_percent, 1),
+                    "score": round_percent(c.score),
+                    "ko_percent": round_percent(c.ko_percent),
+                    "switch_percent": round_percent(c.switch_percent),
                 }
-                for c in stats.checks_counters[:5]
+                for c in stats.checks_counters[:MAX_COUNTERS_DISPLAY]
             ]
 
         return result

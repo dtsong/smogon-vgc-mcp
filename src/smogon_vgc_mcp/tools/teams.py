@@ -10,6 +10,7 @@ from smogon_vgc_mcp.database import (
     search_teams,
 )
 from smogon_vgc_mcp.formats import get_format
+from smogon_vgc_mcp.utils import cap_limit, make_error_response
 
 
 def register_team_tools(mcp: FastMCP) -> None:
@@ -28,10 +29,10 @@ def register_team_tools(mcp: FastMCP) -> None:
         team = await get_team(team_id)
 
         if not team:
-            return {
-                "error": f"Team '{team_id}' not found",
-                "hint": "Team IDs start with format prefix + number (e.g., F123 for Reg F)",
-            }
+            return make_error_response(
+                f"Team '{team_id}' not found",
+                hint="Team IDs start with format prefix + number (e.g., F123 for Reg F)",
+            )
 
         return {
             "team_id": team.team_id,
@@ -78,12 +79,12 @@ def register_team_tools(mcp: FastMCP) -> None:
             List of matching teams with Pokemon summaries
         """
         if not pokemon and not tournament and not owner:
-            return {
-                "error": "At least one search parameter required",
-                "hint": "Provide pokemon, tournament, or owner parameter",
-            }
+            return make_error_response(
+                "At least one search parameter required",
+                hint="Provide pokemon, tournament, or owner parameter",
+            )
 
-        limit = min(limit, 20)
+        limit = cap_limit(limit)
         teams = await search_teams(
             pokemon=pokemon, tournament=tournament, owner=owner, format_code=format, limit=limit
         )
@@ -142,7 +143,7 @@ def register_team_tools(mcp: FastMCP) -> None:
         Returns:
             List of EV spreads with frequency and team IDs
         """
-        limit = min(limit, 20)
+        limit = cap_limit(limit)
         spreads = await get_tournament_ev_spreads(pokemon, format, limit)
 
         if not spreads:
@@ -197,7 +198,7 @@ def register_team_tools(mcp: FastMCP) -> None:
         if pokemon4:
             core.append(pokemon4)
 
-        limit = min(limit, 20)
+        limit = cap_limit(limit)
         teams = await get_teams_with_core(core, format, limit)
 
         if not teams:

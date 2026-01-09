@@ -17,6 +17,7 @@ from smogon_vgc_mcp.database.queries import (
     search_dex_moves,
     search_dex_pokemon,
 )
+from smogon_vgc_mcp.utils import make_error_response
 
 
 def register_pokedex_tools(mcp: FastMCP) -> None:
@@ -35,10 +36,10 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
         result = await get_dex_pokemon(pokemon)
 
         if not result:
-            return {
-                "error": f"Pokemon '{pokemon}' not found in Pokedex",
-                "hint": "Try using search_dex to find the correct name",
-            }
+            return make_error_response(
+                f"Pokemon '{pokemon}' not found in Pokedex",
+                hint="Try using search_dex to find the correct name",
+            )
 
         bst = sum(result.base_stats.values())
 
@@ -69,10 +70,10 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
         result = await get_dex_move(move)
 
         if not result:
-            return {
-                "error": f"Move '{move}' not found in Pokedex",
-                "hint": "Try using search_dex with category='moves' to find the correct name",
-            }
+            return make_error_response(
+                f"Move '{move}' not found in Pokedex",
+                hint="Try using search_dex with category='moves' to find the correct name",
+            )
 
         return {
             "name": result.name,
@@ -99,10 +100,10 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
         result = await get_dex_ability(ability)
 
         if not result:
-            return {
-                "error": f"Ability '{ability}' not found in Pokedex",
-                "hint": "Try using search_dex with category='abilities' to find the correct name",
-            }
+            return make_error_response(
+                f"Ability '{ability}' not found in Pokedex",
+                hint="Try using search_dex with category='abilities' to find the correct name",
+            )
 
         return {
             "name": result.name,
@@ -123,10 +124,10 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
         result = await get_dex_item(item)
 
         if not result:
-            return {
-                "error": f"Item '{item}' not found in Pokedex",
-                "hint": "Try using search_dex with category='items' to find the correct name",
-            }
+            return make_error_response(
+                f"Item '{item}' not found in Pokedex",
+                hint="Try using search_dex with category='items' to find the correct name",
+            )
 
         return {
             "name": result.name,
@@ -148,10 +149,10 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
         moves = await get_pokemon_learnset(pokemon)
 
         if not moves:
-            return {
-                "error": f"No learnset found for '{pokemon}'",
-                "hint": "Try using dex_pokemon first to verify the Pokemon name",
-            }
+            return make_error_response(
+                f"No learnset found for '{pokemon}'",
+                hint="Try using dex_pokemon first to verify the Pokemon name",
+            )
 
         # Organize by type
         by_type = {}
@@ -207,10 +208,10 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
         result = await get_pokemon_type_matchups(pokemon)
 
         if not result:
-            return {
-                "error": f"Pokemon '{pokemon}' not found in Pokedex",
-                "hint": "Try using dex_pokemon first to verify the Pokemon name",
-            }
+            return make_error_response(
+                f"Pokemon '{pokemon}' not found in Pokedex",
+                hint="Try using dex_pokemon first to verify the Pokemon name",
+            )
 
         return result
 
@@ -296,10 +297,10 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
             }
 
         else:
-            return {
-                "error": f"Unknown category '{category}'",
-                "valid_categories": ["pokemon", "moves", "abilities", "items"],
-            }
+            return make_error_response(
+                f"Unknown category '{category}'",
+                valid_categories=["pokemon", "moves", "abilities", "items"],
+            )
 
     @mcp.tool()
     async def dex_pokemon_by_type(
@@ -318,10 +319,10 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
         results = await get_pokemon_by_type(pokemon_type, limit)
 
         if not results:
-            return {
-                "error": f"No Pokemon found with type '{pokemon_type}'",
-                "hint": "Make sure the type name is capitalized (e.g., 'Fairy', not 'fairy')",
-            }
+            return make_error_response(
+                f"No Pokemon found with type '{pokemon_type}'",
+                hint="Make sure the type name is capitalized (e.g., 'Fairy', not 'fairy')",
+            )
 
         return {
             "type": pokemon_type,
@@ -355,10 +356,10 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
         results = await get_moves_by_type(move_type, category, limit)
 
         if not results:
-            return {
-                "error": f"No moves found with type '{move_type}'",
-                "hint": "Make sure the type name is capitalized (e.g., 'Fairy', not 'fairy')",
-            }
+            return make_error_response(
+                f"No moves found with type '{move_type}'",
+                hint="Make sure the type name is capitalized (e.g., 'Fairy', not 'fairy')",
+            )
 
         return {
             "type": move_type,

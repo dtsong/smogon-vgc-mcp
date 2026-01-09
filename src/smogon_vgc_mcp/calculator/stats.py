@@ -6,6 +6,7 @@ from smogon_vgc_mcp.data.pokemon_data import (
     get_base_stats,
     get_nature_multiplier,
 )
+from smogon_vgc_mcp.utils import parse_ev_string, parse_iv_string
 
 
 def calculate_hp(base: int, iv: int, ev: int, level: int = 50) -> int:
@@ -31,104 +32,6 @@ def calculate_stat(
     """
     raw = math.floor((2 * base + iv + math.floor(ev / 4)) * level / 100) + 5
     return math.floor(raw * nature_multiplier)
-
-
-def parse_ev_string(evs: str) -> dict[str, int]:
-    """Parse EV string like '252/4/0/252/0/0' or '252 HP / 4 Def / 252 SpA'.
-
-    Returns:
-        Dict with hp, atk, def, spa, spd, spe keys
-    """
-    result = {"hp": 0, "atk": 0, "def": 0, "spa": 0, "spd": 0, "spe": 0}
-
-    # Check if it's slash-separated numbers (compact format)
-    if "/" in evs and not any(c.isalpha() for c in evs.replace("/", "")):
-        parts = evs.split("/")
-        if len(parts) == 6:
-            stats = ["hp", "atk", "def", "spa", "spd", "spe"]
-            for i, part in enumerate(parts):
-                result[stats[i]] = int(part.strip())
-            return result
-
-    # Parse Pokemon Showdown format: "252 HP / 4 Def / 252 SpA"
-    stat_map = {
-        "hp": "hp",
-        "atk": "atk",
-        "attack": "atk",
-        "def": "def",
-        "defense": "def",
-        "spa": "spa",
-        "spatk": "spa",
-        "specialattack": "spa",
-        "spd": "spd",
-        "spdef": "spd",
-        "specialdefense": "spd",
-        "spe": "spe",
-        "speed": "spe",
-    }
-
-    parts = evs.split("/")
-    for part in parts:
-        part = part.strip()
-        # Match "252 HP" or "4 Def"
-        for stat_name, stat_key in stat_map.items():
-            if stat_name in part.lower():
-                # Extract the number
-                num = "".join(c for c in part if c.isdigit())
-                if num:
-                    result[stat_key] = int(num)
-                break
-
-    return result
-
-
-def parse_iv_string(ivs: str) -> dict[str, int]:
-    """Parse IV string. Defaults to 31 for unspecified IVs.
-
-    Supports:
-    - '31/31/31/31/31/31' (compact)
-    - '0 Atk' (showdown format, missing = 31)
-    """
-    result = {"hp": 31, "atk": 31, "def": 31, "spa": 31, "spd": 31, "spe": 31}
-
-    if not ivs:
-        return result
-
-    # Check if it's slash-separated numbers (compact format)
-    if "/" in ivs and not any(c.isalpha() for c in ivs.replace("/", "")):
-        parts = ivs.split("/")
-        if len(parts) == 6:
-            stats = ["hp", "atk", "def", "spa", "spd", "spe"]
-            for i, part in enumerate(parts):
-                result[stats[i]] = int(part.strip())
-            return result
-
-    # Parse Pokemon Showdown format: "0 Atk"
-    stat_map = {
-        "hp": "hp",
-        "atk": "atk",
-        "attack": "atk",
-        "def": "def",
-        "defense": "def",
-        "spa": "spa",
-        "spatk": "spa",
-        "spd": "spd",
-        "spdef": "spd",
-        "spe": "spe",
-        "speed": "spe",
-    }
-
-    parts = ivs.split("/")
-    for part in parts:
-        part = part.strip()
-        for stat_name, stat_key in stat_map.items():
-            if stat_name in part.lower():
-                num = "".join(c for c in part if c.isdigit())
-                if num:
-                    result[stat_key] = int(num)
-                break
-
-    return result
 
 
 def calculate_all_stats(
