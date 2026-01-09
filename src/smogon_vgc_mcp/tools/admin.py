@@ -27,15 +27,23 @@ def register_admin_tools(mcp: FastMCP) -> None:
         month: str | None = None,
         elo: int | None = None,
     ) -> dict:
-        """Fetch latest VGC data from Smogon and update the local database.
+        """Fetch latest VGC usage stats from Smogon and update the local database.
+
+        Run this first to populate Pokemon usage data (usage rates, moves, items, abilities,
+        teammates, spreads). Required before using get_pokemon, get_top_pokemon, and other
+        usage-based tools.
+
+        Returns: status, format, successful_fetches, failed_fetches, total_pokemon_records,
+        details[], errors[].
+
+        Examples:
+        - "Refresh the usage stats"
+        - "Fetch latest Smogon data for Reg F"
 
         Args:
-            format: VGC format code (e.g., "regf" for Regulation F)
-            month: Specific month to refresh (None = all months)
-            elo: Specific ELO bracket to refresh (None = all brackets)
-
-        Returns:
-            Summary of fetched data
+            format: VGC format code (e.g., "regf" for Regulation F).
+            month: Specific month to refresh (None = all available months).
+            elo: Specific ELO bracket (None = all brackets: 0, 1500, 1630, 1760).
         """
         try:
             validate_format_code(format)
@@ -61,13 +69,20 @@ def register_admin_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def get_usage_stats_status(format: str | None = None) -> dict:
-        """Get the current status of cached VGC data.
+        """Check if VGC usage stats data is cached and what months/ELOs are available.
+
+        Use this to verify data availability before querying. Shows when data was fetched.
+        Run refresh_usage_stats to populate data if status shows no_data.
+
+        Returns: status (ready/no_data), format, total_snapshots, formats_available[],
+        by_format{format: {month: [{elo, battles, fetched_at}]}}.
+
+        Examples:
+        - "Is the usage data loaded?"
+        - "What months of data are available?"
 
         Args:
-            format: VGC format code to filter by (e.g., "regf"), None for all formats
-
-        Returns:
-            Information about available data snapshots
+            format: VGC format code to filter by (e.g., "regf"). None for all formats.
         """
         try:
             if format:
@@ -113,21 +128,24 @@ def register_admin_tools(mcp: FastMCP) -> None:
         month: str | None = None,
         elo: int | None = None,
     ) -> dict:
-        """Fetch moveset data (Tera Types, Checks/Counters) from Smogon.
+        """Fetch Tera Type and Checks/Counters data from Smogon to augment usage stats.
 
-        This fetches the moveset text files and extracts Tera Type distributions
-        and Checks/Counters data that isn't available in the chaos JSON.
+        Run this AFTER refresh_usage_stats to add Tera type distributions and counter data.
+        Required for find_pokemon_by_tera and get_pokemon_counters tools.
 
-        IMPORTANT: Run refresh_usage_stats first to populate the base Pokemon usage data.
-        This tool augments that data with additional information.
+        Returns: status, format, successful_fetches, failed_fetches, total_pokemon_updated,
+        details[], errors[].
+
+        Examples:
+        - "Refresh the moveset data for Tera types"
+        - "Fetch checks and counters data"
+
+        Constraints: Requires refresh_usage_stats to be run first.
 
         Args:
-            format: VGC format code (e.g., "regf" for Regulation F)
-            month: Specific month to refresh (None = all months)
-            elo: Specific ELO bracket to refresh (None = all brackets)
-
-        Returns:
-            Summary of fetched moveset data
+            format: VGC format code (e.g., "regf").
+            month: Specific month to refresh (None = all months).
+            elo: Specific ELO bracket (None = all brackets).
         """
         try:
             validate_format_code(format)
@@ -156,17 +174,21 @@ def register_admin_tools(mcp: FastMCP) -> None:
         format: str = DEFAULT_FORMAT,
         max_teams: int | None = None,
     ) -> dict:
-        """Fetch tournament teams from Google Sheet and parse their pokepastes.
+        """Fetch tournament teams from VGC Pastes Repository and parse their pokepastes.
 
-        This fetches the VGC Pastes Repository spreadsheet and parses each
-        pokepaste link to extract full team details.
+        Run this to populate tournament team data (full team details with EVs, moves, items).
+        Required for search_tournament_teams, get_tournament_team, and team-related tools.
+
+        Returns: status, format, total_teams, successfully_parsed, failed_to_fetch,
+        skipped, sample_success[], sample_failures[].
+
+        Examples:
+        - "Fetch tournament team data"
+        - "Load pokepaste teams for Reg F"
 
         Args:
-            format: VGC format code (e.g., "regf" for Regulation F)
-            max_teams: Optional limit on number of teams to process (for testing)
-
-        Returns:
-            Summary of fetched and parsed teams
+            format: VGC format code (e.g., "regf").
+            max_teams: Optional limit for testing (None = all teams).
         """
         try:
             validate_format_code(format)
@@ -188,13 +210,19 @@ def register_admin_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def get_pokepaste_data_status(format: str | None = None) -> dict:
-        """Get the current status of the pokepaste team database.
+        """Check if tournament team data is cached and how many teams are available.
+
+        Use this to verify team data availability. Run refresh_pokepaste_data to
+        populate if status shows no_data.
+
+        Returns: status (ready/no_data), format, total_teams, source.
+
+        Examples:
+        - "Is tournament team data loaded?"
+        - "How many teams are in the database?"
 
         Args:
-            format: VGC format code to filter by (e.g., "regf"), None for all formats
-
-        Returns:
-            Information about cached tournament team data
+            format: VGC format code to filter by (e.g., "regf"). None for all formats.
         """
         try:
             if format:
@@ -223,13 +251,17 @@ def register_admin_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def refresh_pokedex_data() -> dict:
-        """Fetch Pokedex data from Pokemon Showdown.
+        """Fetch Pokedex data (Pokemon, moves, abilities, items, learnsets) from Pokemon Showdown.
 
-        This fetches Pokemon species, moves, abilities, items, learnsets,
-        and type chart data from Pokemon Showdown's data files.
+        Run this to populate static Pokedex data. Required for dex_pokemon, dex_move,
+        dex_ability, dex_item, dex_learnset, and type-related tools.
 
-        Returns:
-            Summary of fetched Pokedex data
+        Returns: status, pokemon_count, moves_count, abilities_count, items_count,
+        learnsets_count, type_chart_count, errors[].
+
+        Examples:
+        - "Fetch Pokedex data"
+        - "Load Pokemon Showdown data"
         """
         results = await fetch_and_store_pokedex_all()
 
@@ -246,10 +278,17 @@ def register_admin_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def get_pokedex_data_status() -> dict:
-        """Get the current status of the Pokedex database.
+        """Check if Pokedex data is cached and how many entries are available.
 
-        Returns:
-            Information about cached Pokedex data
+        Use this to verify Pokedex data availability. Run refresh_pokedex_data to
+        populate if status shows no_data.
+
+        Returns: status (ready/no_data), source, counts{pokemon, moves, abilities,
+        items, learnsets, type_chart}.
+
+        Examples:
+        - "Is Pokedex data loaded?"
+        - "How many Pokemon are in the database?"
         """
         stats = await get_pokedex_stats()
 
@@ -270,10 +309,17 @@ def register_admin_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def list_available_formats() -> dict:
-        """List all available VGC formats supported by this server.
+        """List all VGC formats supported by this server with their details.
 
-        Returns:
-            List of format codes with their details
+        Use this to see available format codes and their configuration. Format codes
+        are used as parameters in most other tools (e.g., "regf" for Regulation F).
+
+        Returns: formats[]{code, name, smogon_format_id, available_months[],
+        available_elos[], is_current, has_team_data}, current_format, default_format.
+
+        Examples:
+        - "What VGC formats are supported?"
+        - "What's the current format code?"
         """
         formats = []
         for code, fmt in FORMATS.items():

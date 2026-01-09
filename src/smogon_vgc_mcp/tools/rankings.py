@@ -26,16 +26,22 @@ def register_rankings_tools(mcp: FastMCP) -> None:
         elo: int = 1500,
         limit: int = 20,
     ) -> dict:
-        """Get top Pokemon by usage rate.
+        """Get the most used Pokemon in VGC ranked by usage percentage.
+
+        Use this to see the current meta (most popular Pokemon). For detailed stats
+        on a specific Pokemon, use get_pokemon instead.
+
+        Returns: format, month, elo, rankings[]{rank, pokemon, usage_percent}.
+
+        Examples:
+        - "What are the top 10 most used Pokemon?"
+        - "Show me the VGC usage rankings"
 
         Args:
-            format: VGC format code (e.g., "regf" for Regulation F)
-            month: Stats month (format-dependent)
-            elo: ELO bracket (0=all, 1500, 1630, 1760)
-            limit: Number of Pokemon to return (max 50)
-
-        Returns:
-            List of top Pokemon with usage stats
+            format: VGC format code (e.g., "regf" for Regulation F).
+            month: Stats month in YYYY-MM format.
+            elo: ELO bracket (0=all, 1500, 1630, 1760).
+            limit: Number of Pokemon to return (max 50).
         """
         try:
             validate_format_code(format)
@@ -73,15 +79,22 @@ def register_rankings_tools(mcp: FastMCP) -> None:
         format: str = DEFAULT_FORMAT,
         elo: int = 1500,
     ) -> dict:
-        """Compare a Pokemon's usage across available months for a format.
+        """Compare a Pokemon's usage rate across different months to see trends.
+
+        Use this to track if a Pokemon is rising or falling in popularity over time.
+        For comparing usage at different skill levels, use compare_elo_brackets instead.
+
+        Returns: pokemon, format, elo, {first_month}, {last_month}, change{usage_percent_change,
+        direction (up/down/stable)}.
+
+        Examples:
+        - "Is Incineroar usage going up or down?"
+        - "How has Flutter Mane's usage changed over time?"
 
         Args:
-            pokemon: Pokemon name
-            format: VGC format code (e.g., "regf")
-            elo: ELO bracket to compare
-
-        Returns:
-            Usage comparison between months
+            pokemon: Pokemon name.
+            format: VGC format code (e.g., "regf").
+            elo: ELO bracket to compare.
         """
         try:
             validate_format_code(format)
@@ -148,15 +161,22 @@ def register_rankings_tools(mcp: FastMCP) -> None:
         format: str = DEFAULT_FORMAT,
         month: str = "2025-12",
     ) -> dict:
-        """Compare a Pokemon's usage across different ELO brackets.
+        """Compare a Pokemon's usage across different ELO brackets (skill levels).
+
+        Use this to see if a Pokemon is more popular at high or low ladder. For tracking
+        usage trends over time, use compare_pokemon_usage instead.
+
+        Returns: pokemon, format, month, by_elo{"0"|"1500"|"1630"|"1760": {usage_percent,
+        raw_count}}.
+
+        Examples:
+        - "Is Incineroar more popular at high ELO?"
+        - "Do top players use Flutter Mane more?"
 
         Args:
-            pokemon: Pokemon name
-            format: VGC format code (e.g., "regf")
-            month: Stats month
-
-        Returns:
-            Usage comparison across ELO brackets
+            pokemon: Pokemon name.
+            format: VGC format code (e.g., "regf").
+            month: Stats month in YYYY-MM format.
         """
         try:
             validate_format_code(format)

@@ -94,52 +94,38 @@ def register_ev_generator_tools(mcp: FastMCP) -> None:
         ability: str | None = None,
         tera_type: str | None = None,
     ) -> dict:
-        """Generate an optimized EV spread for specific goals.
+        """Generate an optimized EV spread for a Pokemon based on multiple prioritized goals.
 
-        This tool takes a Pokemon and a list of goals (in priority order) and
-        generates an EV spread that attempts to achieve all goals within the
-        510 EV limit. Goals are processed in order - earlier goals have higher priority.
+        Use this for full EV spread optimization with multiple requirements (survive X, OHKO Y,
+        outspeed Z). For single-purpose calculations, use find_minimum_survival_evs,
+        find_minimum_ohko_evs, or find_speed_evs instead.
+
+        Returns: pokemon, spread{nature, evs, evs_compact, ivs}, calculated_stats,
+        goal_results[]{goal, achieved, evs_used, detail}, ev_total, suggestions.
+
+        Examples:
+        - "Build Incineroar to survive Flutter Mane Moonblast and maximize HP"
+        - "Create Urshifu spread that OHKOs Incineroar and outspeeds Rillaboom"
+
+        Constraints: Goals processed in priority order (first = highest). 510 EV limit enforced.
 
         Args:
-            pokemon: Pokemon name (e.g., "Incineroar", "Flutter Mane")
-            goals: List of goal dicts in priority order (first = highest priority).
-                Each goal must have a "type" field. Goal types and required fields:
-
-                SURVIVE - Survive a specific attack:
-                  Required: {"type": "survive", "attacker": str, "move": str}
-                  Optional: attacker_evs (default "252/0/0/252/0/0"),
-                            attacker_nature (default "Modest"),
-                            attacker_item, attacker_ability, attacker_tera,
-                            weather ("Sun"/"Rain"/"Sand"/"Snow"),
-                            terrain ("Grassy"/"Electric"/"Psychic"/"Misty")
-
-                OHKO - Guarantee OHKO on a target:
-                  Required: {"type": "ohko", "defender": str, "move": str}
-                  Optional: defender_evs (default "252/0/0/0/0/0"),
-                            defender_nature (default "Bold"),
-                            defender_item, defender_ability
-
-                OUTSPEED - Outspeed a target Pokemon:
-                  Required: {"type": "outspeed", "target": str}
-                  Optional: target_evs (default "0/0/0/0/0/252"),
-                            target_nature (default "Timid")
-
-                UNDERSPEED - Underspeed a target (Trick Room):
-                  Required: {"type": "underspeed", "target": str}
-                  Optional: target_evs (default "0/0/0/0/0/0"),
-                            target_nature (default "Brave")
-
-                MAXIMIZE - Invest remaining EVs in a stat:
-                  Required: {"type": "maximize", "stat": "hp"|"atk"|"def"|"spa"|"spd"|"spe"}
-
-            nature: Preferred nature. If None, auto-selected based on goals
-                (e.g., "Adamant" +Atk/-SpA, "Modest" +SpA/-Atk, "Careful" +SpD/-SpA)
-            item: Held item (e.g., "Assault Vest", "Choice Specs", "Life Orb")
-            ability: Pokemon's ability (e.g., "Intimidate", "Protosynthesis")
-            tera_type: Tera type for defensive calcs (e.g., "Fairy", "Ghost", "Water")
-
-        Returns:
-            Optimized spread with goal results, calculated stats, and suggestions
+            pokemon: Pokemon name (e.g., "Incineroar", "Flutter Mane").
+            goals: List of goal dicts in priority order. Goal types:
+                SURVIVE: {"type": "survive", "attacker": str, "move": str}
+                  Optional: attacker_evs, attacker_nature, attacker_item, attacker_ability,
+                  attacker_tera, weather, terrain
+                OHKO: {"type": "ohko", "defender": str, "move": str}
+                  Optional: defender_evs, defender_nature, defender_item, defender_ability
+                OUTSPEED: {"type": "outspeed", "target": str}
+                  Optional: target_evs, target_nature
+                UNDERSPEED: {"type": "underspeed", "target": str}
+                  Optional: target_evs, target_nature
+                MAXIMIZE: {"type": "maximize", "stat": "hp"|"atk"|"def"|"spa"|"spd"|"spe"}
+            nature: Preferred nature (auto-selected if None).
+            item: Held item for calculations.
+            ability: Pokemon's ability.
+            tera_type: Tera type for defensive calculations.
         """
         try:
             validate_pokemon_name(pokemon)
@@ -216,30 +202,32 @@ def register_ev_generator_tools(mcp: FastMCP) -> None:
         weather: str | None = None,
         terrain: str | None = None,
     ) -> dict:
-        """Find minimum defensive EVs needed to survive a specific attack.
+        """Find minimum HP + defensive EVs needed to survive a specific attack.
 
-        This tool calculates the minimum HP + defensive stat investment needed
-        to guarantee survival against a specific attack.
+        Use this when you need exact investment to survive one attack. For optimizing
+        a full spread with multiple goals, use suggest_ev_spread instead.
+
+        Returns: pokemon, attacker, move, minimum_evs{}, evs_formatted, damage_range,
+        defense_stat_invested, total_defensive_evs.
+
+        Examples:
+        - "What EVs does Incineroar need to survive Flutter Mane Moonblast?"
+        - "How much SpD does Rillaboom need to live Kyogre Water Spout?"
 
         Args:
-            pokemon: Defending Pokemon name (e.g., "Incineroar")
-            attacker: Attacking Pokemon name (e.g., "Flutter Mane")
-            move: Move being used (e.g., "Moonblast")
-            pokemon_nature: Defender's nature. Default "Careful" (+SpD/-SpA)
-                is common for specially defensive Pokemon
-            attacker_evs: Attacker's EV spread as "HP/Atk/Def/SpA/SpD/Spe"
-            attacker_nature: Attacker's nature. Default "Modest" (+SpA/-Atk)
-                assumes max special attack investment
-            attacker_item: Attacker's held item (e.g., "Choice Specs", "Life Orb")
-            attacker_ability: Attacker's ability (e.g., "Protosynthesis")
-            pokemon_item: Defender's held item (e.g., "Assault Vest", "Sitrus Berry")
-            pokemon_ability: Defender's ability (e.g., "Intimidate", "Thick Fat")
-            attacker_tera: Attacker's Tera type if active (e.g., "Fairy")
-            weather: Active weather: "Sun", "Rain", "Sand", or "Snow"
-            terrain: Active terrain: "Grassy", "Electric", "Psychic", or "Misty"
-
-        Returns:
-            Minimum EVs needed and damage range after investment
+            pokemon: Defending Pokemon name.
+            attacker: Attacking Pokemon name.
+            move: Attack to survive.
+            pokemon_nature: Defender's nature (default "Careful" for SpD).
+            attacker_evs: Attacker's spread (default max SpA "252/0/0/252/0/0").
+            attacker_nature: Attacker's nature (default "Modest").
+            attacker_item: Attacker's item (e.g., "Choice Specs").
+            attacker_ability: Attacker's ability.
+            pokemon_item: Defender's item (e.g., "Assault Vest").
+            pokemon_ability: Defender's ability.
+            attacker_tera: Attacker's Tera type if active.
+            weather: Active weather ("Sun", "Rain", "Sand", "Snow").
+            terrain: Active terrain ("Grassy", "Electric", "Psychic", "Misty").
         """
         try:
             validate_pokemon_name(pokemon)
@@ -298,27 +286,29 @@ def register_ev_generator_tools(mcp: FastMCP) -> None:
         defender_item: str | None = None,
         defender_ability: str | None = None,
     ) -> dict:
-        """Find minimum offensive EVs needed to OHKO a specific target.
+        """Find minimum Attack or Special Attack EVs needed to OHKO a specific target.
 
-        This tool calculates the minimum Attack or Special Attack EVs needed
-        to guarantee an OHKO against a specific target.
+        Use this when you need exact offensive investment for an OHKO. For optimizing
+        a full spread with multiple goals, use suggest_ev_spread instead.
+
+        Returns: pokemon, defender, move, minimum_evs{}, evs_formatted, damage_range,
+        guaranteed_ohko, attack_stat_invested.
+
+        Examples:
+        - "What SpA EVs does Flutter Mane need to OHKO Incineroar?"
+        - "Can Urshifu OHKO Rillaboom with minimal Attack investment?"
 
         Args:
-            pokemon: Attacking Pokemon name (e.g., "Flutter Mane")
-            defender: Defending Pokemon name (e.g., "Incineroar")
-            move: Move to use (e.g., "Moonblast")
-            pokemon_nature: Attacker's nature. Default "Modest" (+SpA/-Atk)
-                for special attackers. Use "Adamant" (+Atk/-SpA) for physical
-            defender_evs: Defender's EV spread as "HP/Atk/Def/SpA/SpD/Spe"
-            defender_nature: Defender's nature. Default "Bold" (+Def/-Atk)
-                assumes physically defensive target
-            pokemon_item: Attacker's held item (e.g., "Choice Specs", "Life Orb")
-            pokemon_ability: Attacker's ability (e.g., "Protosynthesis")
-            defender_item: Defender's held item (e.g., "Assault Vest")
-            defender_ability: Defender's ability (e.g., "Intimidate")
-
-        Returns:
-            Minimum EVs needed and damage range
+            pokemon: Attacking Pokemon name.
+            defender: Target Pokemon name.
+            move: Move to use.
+            pokemon_nature: Attacker's nature (default "Modest" for SpA, "Adamant" for Atk).
+            defender_evs: Defender's spread (default "252/0/0/0/0/0").
+            defender_nature: Defender's nature (default "Bold").
+            pokemon_item: Attacker's item.
+            pokemon_ability: Attacker's ability.
+            defender_item: Defender's item.
+            defender_ability: Defender's ability.
         """
         try:
             validate_pokemon_name(pokemon)
@@ -367,19 +357,26 @@ def register_ev_generator_tools(mcp: FastMCP) -> None:
         target_evs: str = "0/0/0/0/0/252",
         target_nature: str = "Timid",
     ) -> dict:
-        """Find Speed EVs needed to outspeed or underspeed a target.
+        """Find Speed EVs needed to outspeed or underspeed a specific target Pokemon.
+
+        Use this for speed tier calculations. For comparing speeds of specific builds,
+        use compare_pokemon_speeds. For what a speed stat beats in general, use
+        get_speed_benchmarks.
+
+        Returns: pokemon, target, goal (outspeed/underspeed), speed_evs_needed,
+        resulting_speed, target_speed, margin.
+
+        Examples:
+        - "How much Speed does Incineroar need to outspeed Amoonguss?"
+        - "What Speed EVs for Torkoal to underspeed Dondozo in Trick Room?"
 
         Args:
-            pokemon: Pokemon to calculate for (e.g., "Incineroar")
-            target: Target Pokemon to compare against (e.g., "Flutter Mane")
-            goal_type: "outspeed" to be faster, "underspeed" for Trick Room
-            pokemon_nature: Pokemon's nature. Default "Jolly" (+Spe/-SpA)
-                for outspeeding. Use "Brave" (+Atk/-Spe) for underspeeding
-            target_evs: Target's EV spread as "HP/Atk/Def/SpA/SpD/Spe"
-            target_nature: Target's nature (e.g., "Timid" +Spe/-Atk, "Jolly" +Spe/-SpA)
-
-        Returns:
-            EVs needed and resulting speed stats
+            pokemon: Pokemon to calculate EVs for.
+            target: Target Pokemon to compare against.
+            goal_type: "outspeed" (be faster) or "underspeed" (Trick Room).
+            pokemon_nature: Pokemon's nature (default "Jolly", use "Brave" for underspeed).
+            target_evs: Target's EV spread.
+            target_nature: Target's nature.
         """
         try:
             validate_pokemon_name(pokemon)

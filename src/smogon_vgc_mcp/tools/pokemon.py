@@ -30,16 +30,27 @@ def register_pokemon_tools(mcp: FastMCP) -> None:
         month: str = "2025-12",
         elo: int = 1500,
     ) -> dict:
-        """Get comprehensive stats for a Pokemon.
+        """Get VGC usage stats for a Pokemon: moves, items, abilities, teammates, and spreads.
+
+        Use this for VGC meta information (what moves/items are popular, who to pair with).
+        For static Pokedex data (base stats, types), use dex_pokemon instead. For searching
+        by partial name, use find_pokemon.
+
+        Returns: pokemon, usage_percent, raw_count, viability_ceiling, abilities[], items[],
+        moves[], teammates[], spreads[], tera_types[] (if available), checks_counters[].
+
+        Examples:
+        - "What moves does Incineroar commonly run?"
+        - "What items are popular on Flutter Mane?"
+        - "Who are good teammates for Rillaboom?"
+
+        Constraints: Data must be fetched first with refresh_usage_stats.
 
         Args:
-            pokemon: Pokemon name (e.g., "Incineroar", "Flutter Mane")
-            format: VGC format code (e.g., "regf" for Regulation F)
-            month: Stats month (format-dependent)
-            elo: ELO bracket (0=all, 1500, 1630, 1760)
-
-        Returns:
-            Pokemon stats including usage, abilities, items, moves, teammates, spreads
+            pokemon: Pokemon name (e.g., "Incineroar", "Flutter Mane"). Case-sensitive.
+            format: VGC format code (e.g., "regf" for Regulation F).
+            month: Stats month in YYYY-MM format.
+            elo: ELO bracket (0=all, 1500, 1630, 1760).
         """
         try:
             validate_format_code(format)
@@ -117,16 +128,25 @@ def register_pokemon_tools(mcp: FastMCP) -> None:
         month: str = "2025-12",
         elo: int = 1500,
     ) -> dict:
-        """Search for Pokemon by partial name match.
+        """Search for Pokemon by partial name in VGC usage data.
+
+        Use this when you don't know the exact Pokemon name. Returns matching names from
+        the usage stats database. For Pokedex searches (finding Pokemon not in the current
+        meta), use search_dex instead.
+
+        Returns: query, format, matches[] (list of Pokemon names), count.
+
+        Examples:
+        - "Find Pokemon containing 'incin'"
+        - "Search for 'flutter' in the usage stats"
+
+        Constraints: Only finds Pokemon present in usage stats for the given format/month.
 
         Args:
-            query: Search query (partial name match)
-            format: VGC format code (e.g., "regf" for Regulation F)
-            month: Stats month
-            elo: ELO bracket
-
-        Returns:
-            List of matching Pokemon names
+            query: Partial name to search (e.g., "incin", "flutter"). Case-insensitive.
+            format: VGC format code (e.g., "regf").
+            month: Stats month in YYYY-MM format.
+            elo: ELO bracket.
         """
         try:
             validate_format_code(format)

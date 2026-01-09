@@ -24,13 +24,21 @@ def register_team_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def get_tournament_team(team_id: str) -> dict:
-        """Get a specific tournament team by ID with full Pokemon details.
+        """Get full details of a specific tournament team by its ID.
+
+        Use this when you have a team ID and want complete team information including
+        all Pokemon with EVs, IVs, moves, items, abilities, and Tera types. To find
+        team IDs, use search_tournament_teams first.
+
+        Returns: team_id, description, owner, tournament, rank, rental_code, pokepaste_url,
+        pokemon[]{slot, pokemon, item, ability, tera_type, nature, evs, ivs, moves[]}.
+
+        Examples:
+        - "Show me team F123"
+        - "Get the full details of team F456"
 
         Args:
-            team_id: Team ID (e.g., "F123", "F456")
-
-        Returns:
-            Full team details including all Pokemon with EVs, moves, items, etc.
+            team_id: Team ID (e.g., "F123", "G456"). Format prefix + number.
         """
         if not team_id or not team_id.strip():
             return make_error_response(
@@ -78,19 +86,27 @@ def register_team_tools(mcp: FastMCP) -> None:
         format: str | None = None,
         limit: int = 10,
     ) -> dict:
-        """Search tournament teams by Pokemon, tournament name, or owner.
+        """Search tournament teams by Pokemon, tournament name, or player name.
 
-        At least one of pokemon, tournament, or owner must be provided.
+        Use this to find teams matching criteria. Returns team summaries with IDs.
+        For full team details, use get_tournament_team with the team ID.
+
+        Returns: query{pokemon, tournament, owner, format}, count, teams[]{team_id,
+        description, owner, tournament, rank, rental_code, pokemon[]}.
+
+        Examples:
+        - "Find teams with Incineroar and Flutter Mane"
+        - "Show Wolfe's tournament teams"
+        - "Find Worlds teams"
+
+        Constraints: At least one of pokemon, tournament, or owner must be provided.
 
         Args:
-            pokemon: Pokemon name, partial match (e.g., "Incin" matches "Incineroar")
-            tournament: Tournament name, partial match (e.g., "Worlds", "Regional")
-            owner: Team owner/player name, partial match (e.g., "Wolfe")
-            format: VGC format code to filter by (e.g., "regf"). Optional.
-            limit: Maximum teams to return (default 10, max 50)
-
-        Returns:
-            List of matching teams with Pokemon summaries
+            pokemon: Pokemon name, partial match (e.g., "Incin" matches "Incineroar").
+            tournament: Tournament name, partial match (e.g., "Worlds", "Regional").
+            owner: Player name, partial match (e.g., "Wolfe").
+            format: VGC format code to filter by (e.g., "regf").
+            limit: Max teams to return (default 10, max 50).
         """
         if not pokemon and not tournament and not owner:
             return make_error_response(
@@ -151,18 +167,21 @@ def register_team_tools(mcp: FastMCP) -> None:
         format: str | None = None,
         limit: int = 10,
     ) -> dict:
-        """Get EV spreads for a Pokemon from tournament teams.
+        """Get EV spreads for a Pokemon used by top players in tournaments.
 
-        This shows how top players actually EV their Pokemon in tournaments,
-        which may differ from ladder usage statistics.
+        Use this to see how competitive players build a Pokemon (may differ from ladder
+        stats). For ladder-based spreads, use get_pokemon instead.
+
+        Returns: pokemon, format, count, spreads[]{nature, evs, count, sample_teams[]}.
+
+        Examples:
+        - "How do tournament players EV Incineroar?"
+        - "What spreads do pros use on Flutter Mane?"
 
         Args:
-            pokemon: Pokemon name (e.g., "Incineroar", "Flutter Mane")
-            format: VGC format code to filter by (e.g., "regf")
-            limit: Maximum number of spreads to return
-
-        Returns:
-            List of EV spreads with frequency and team IDs
+            pokemon: Pokemon name (e.g., "Incineroar", "Flutter Mane").
+            format: VGC format code to filter by (e.g., "regf").
+            limit: Max spreads to return.
         """
         try:
             if not pokemon or not pokemon.strip():
@@ -209,18 +228,25 @@ def register_team_tools(mcp: FastMCP) -> None:
         format: str | None = None,
         limit: int = 10,
     ) -> dict:
-        """Find tournament teams that use a specific Pokemon core/combination.
+        """Find tournament teams that use a specific Pokemon core (2-4 Pokemon together).
+
+        Use this to find real teams built around a specific core. For common teammates
+        based on ladder data, use get_pokemon_teammates instead.
+
+        Returns: core[], format, count, teams[]{team_id, description, owner, tournament,
+        rank, rental_code, pokemon[]}.
+
+        Examples:
+        - "Find teams with Incineroar and Flutter Mane"
+        - "Show teams using the Kyogre/Torkoal core"
 
         Args:
-            pokemon1: First Pokemon in the core
-            pokemon2: Second Pokemon in the core
-            pokemon3: Optional third Pokemon
-            pokemon4: Optional fourth Pokemon
-            format: VGC format code to filter by (e.g., "regf")
-            limit: Maximum number of teams to return
-
-        Returns:
-            Teams containing all specified Pokemon
+            pokemon1: First Pokemon in the core.
+            pokemon2: Second Pokemon in the core.
+            pokemon3: Optional third Pokemon.
+            pokemon4: Optional fourth Pokemon.
+            format: VGC format code to filter by (e.g., "regf").
+            limit: Max teams to return.
         """
         try:
             if not pokemon1 or not pokemon1.strip():
@@ -271,13 +297,19 @@ def register_team_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def get_team_database_stats(format: str | None = None) -> dict:
-        """Get statistics about the tournament team database.
+        """Get statistics about the tournament team database (total teams available).
+
+        Use this to check how much team data is available. For detailed status including
+        cache state, use get_pokepaste_data_status instead.
+
+        Returns: format, total_teams, source, data_type.
+
+        Examples:
+        - "How many tournament teams are in the database?"
+        - "How much Reg F team data is available?"
 
         Args:
-            format: VGC format code to filter by (e.g., "regf"), None for all formats
-
-        Returns:
-            Number of teams and Pokemon entries in the database
+            format: VGC format code to filter by (e.g., "regf"). None for all formats.
         """
         try:
             if format:

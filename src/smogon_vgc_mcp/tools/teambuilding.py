@@ -33,17 +33,24 @@ def register_teambuilding_tools(mcp: FastMCP) -> None:
         elo: int = 1500,
         limit: int = 10,
     ) -> dict:
-        """Get the most common teammates for a Pokemon.
+        """Get the most common teammates for a Pokemon based on ladder usage data.
+
+        Use this to find good Pokemon to pair with a core member. For full Pokemon
+        stats including teammates, use get_pokemon. For finding teams using specific
+        Pokemon combinations, use find_teams_with_pokemon_core.
+
+        Returns: pokemon, format, month, elo, teammates[]{teammate, percent}.
+
+        Examples:
+        - "What are good teammates for Incineroar?"
+        - "Who pairs well with Flutter Mane?"
 
         Args:
-            pokemon: Pokemon name (e.g., "Incineroar")
-            format: VGC format code (e.g., "regf")
-            month: Stats month
-            elo: ELO bracket
-            limit: Number of teammates to return
-
-        Returns:
-            List of most common teammates with usage percentages
+            pokemon: Pokemon name (e.g., "Incineroar").
+            format: VGC format code (e.g., "regf").
+            month: Stats month in YYYY-MM format.
+            elo: ELO bracket (0, 1500, 1630, 1760).
+            limit: Number of teammates to return.
         """
         try:
             validate_format_code(format)
@@ -79,17 +86,23 @@ def register_teambuilding_tools(mcp: FastMCP) -> None:
         elo: int = 1500,
         limit: int = 10,
     ) -> dict:
-        """Find Pokemon that commonly use a specific item.
+        """Find Pokemon that commonly use a specific held item in VGC.
+
+        Use this to find item users (e.g., "who uses Choice Scarf?"). For item effect
+        details, use dex_item instead.
+
+        Returns: item, format, month, elo, pokemon[]{pokemon, percent}.
+
+        Examples:
+        - "Which Pokemon use Assault Vest?"
+        - "Who commonly holds Choice Band?"
 
         Args:
-            item: Item name (e.g., "assaultvest", "choicescarf")
-            format: VGC format code (e.g., "regf")
-            month: Stats month
-            elo: ELO bracket
-            limit: Number of Pokemon to return
-
-        Returns:
-            List of Pokemon that use this item most frequently
+            item: Item name (e.g., "assaultvest", "choicescarf"). Lowercase, no spaces.
+            format: VGC format code (e.g., "regf").
+            month: Stats month.
+            elo: ELO bracket.
+            limit: Number of Pokemon to return.
         """
         try:
             validate_format_code(format)
@@ -127,17 +140,23 @@ def register_teambuilding_tools(mcp: FastMCP) -> None:
         elo: int = 1500,
         limit: int = 10,
     ) -> dict:
-        """Find Pokemon that commonly use a specific move.
+        """Find Pokemon that commonly use a specific move in VGC.
+
+        Use this to find move users (e.g., "who uses Fake Out?"). For move effect
+        details, use dex_move instead. For what moves a Pokemon can learn, use dex_learnset.
+
+        Returns: move, format, month, elo, pokemon[]{pokemon, percent}.
+
+        Examples:
+        - "Which Pokemon use Fake Out?"
+        - "Who commonly runs Tailwind?"
 
         Args:
-            move: Move name (e.g., "fakeout", "protect")
-            format: VGC format code (e.g., "regf")
-            month: Stats month
-            elo: ELO bracket
-            limit: Number of Pokemon to return
-
-        Returns:
-            List of Pokemon that use this move most frequently
+            move: Move name (e.g., "fakeout", "protect"). Lowercase, no spaces.
+            format: VGC format code (e.g., "regf").
+            month: Stats month.
+            elo: ELO bracket.
+            limit: Number of Pokemon to return.
         """
         try:
             validate_format_code(format)
@@ -175,17 +194,25 @@ def register_teambuilding_tools(mcp: FastMCP) -> None:
         elo: int = 1500,
         limit: int = 10,
     ) -> dict:
-        """Find Pokemon that commonly use a specific Tera Type.
+        """Find Pokemon that commonly use a specific Tera Type in VGC.
+
+        Use this to find Tera type users (e.g., "who Teras Fairy?"). For Pokemon that
+        are naturally a type, use dex_pokemon_by_type instead.
+
+        Returns: tera_type, format, month, elo, pokemon[]{pokemon, percent}.
+
+        Examples:
+        - "Which Pokemon commonly Tera Fairy?"
+        - "Who uses Tera Ghost?"
+
+        Constraints: Requires running refresh_moveset_data first to populate Tera data.
 
         Args:
-            tera_type: Tera Type name (e.g., "Fairy", "Ghost", "Grass")
-            format: VGC format code (e.g., "regf")
-            month: Stats month
-            elo: ELO bracket
-            limit: Number of Pokemon to return
-
-        Returns:
-            List of Pokemon that use this Tera Type most frequently
+            tera_type: Tera Type name (e.g., "Fairy", "Ghost"). Capitalize first letter.
+            format: VGC format code (e.g., "regf").
+            month: Stats month.
+            elo: ELO bracket.
+            limit: Number of Pokemon to return.
         """
         try:
             validate_format_code(format)
@@ -223,20 +250,27 @@ def register_teambuilding_tools(mcp: FastMCP) -> None:
         elo: int = 1500,
         limit: int = 10,
     ) -> dict:
-        """Get Pokemon that counter a specific Pokemon.
+        """Get Pokemon that counter a specific Pokemon based on Smogon's checks/counters data.
 
-        Based on Smogon's checks and counters data, which tracks win rates
-        and how often the target Pokemon is KOed or forced to switch.
+        Use this to find answers to a threatening Pokemon. Based on win rates and how often
+        the target is KOed or forced to switch. For type-based weaknesses, use
+        dex_pokemon_weaknesses instead.
+
+        Returns: pokemon, format, month, elo, counters[]{pokemon, score, win_percent,
+        ko_percent, switch_percent}.
+
+        Examples:
+        - "What counters Flutter Mane?"
+        - "How do I beat Incineroar?"
+
+        Constraints: Requires running refresh_moveset_data first to populate counter data.
 
         Args:
-            pokemon: Pokemon name to find counters for (e.g., "Flutter Mane")
-            format: VGC format code (e.g., "regf")
-            month: Stats month
-            elo: ELO bracket
-            limit: Number of counters to return
-
-        Returns:
-            List of Pokemon that perform best against the target, with win rates
+            pokemon: Pokemon to find counters for (e.g., "Flutter Mane").
+            format: VGC format code (e.g., "regf").
+            month: Stats month.
+            elo: ELO bracket.
+            limit: Number of counters to return.
         """
         try:
             validate_format_code(format)

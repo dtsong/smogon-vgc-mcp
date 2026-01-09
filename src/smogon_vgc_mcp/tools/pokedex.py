@@ -32,13 +32,21 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def dex_pokemon(pokemon: str) -> dict:
-        """Get Pokedex info for a Pokemon (stats, types, abilities).
+        """Get static Pokedex data for a Pokemon including base stats, types, and abilities.
+
+        Use this for base stats and type information. For VGC usage statistics (common
+        moves, items, teammates), use get_pokemon instead. For searching by partial name,
+        use search_dex.
+
+        Returns: name, types[], base_stats{hp/atk/def/spa/spd/spe}, bst, abilities[],
+        hidden_ability, height_m, weight_kg, tier.
+
+        Examples:
+        - "What are Flutter Mane's base stats?"
+        - "What type is Incineroar?"
 
         Args:
-            pokemon: Pokemon name or ID (e.g., "Flutter Mane", "fluttermane")
-
-        Returns:
-            Pokemon data including types, base stats, and abilities
+            pokemon: Pokemon name (e.g., "Flutter Mane", "Incineroar"). Case-insensitive.
         """
         result = await get_dex_pokemon(pokemon)
 
@@ -66,13 +74,21 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def dex_move(move: str) -> dict:
-        """Get info about a move (type, power, effect).
+        """Get details about a move including type, power, accuracy, and effect description.
+
+        Use this when you know the exact move name. For finding moves by partial name,
+        use search_dex with category='moves'. For finding all moves a Pokemon learns,
+        use dex_learnset.
+
+        Returns: name, type, category (Physical/Special/Status), base_power, accuracy,
+        pp, priority, target, effect.
+
+        Examples:
+        - "What does Moonblast do?"
+        - "What type is Close Combat?"
 
         Args:
-            move: Move name or ID (e.g., "Moonblast", "moonblast")
-
-        Returns:
-            Move data including type, power, accuracy, and effect
+            move: Move name (e.g., "Moonblast", "Close Combat"). Case-insensitive.
         """
         result = await get_dex_move(move)
 
@@ -96,13 +112,19 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def dex_ability(ability: str) -> dict:
-        """Get info about an ability.
+        """Get details about an ability including its effect description.
+
+        Use this when you know the exact ability name. For finding abilities by partial
+        name, use search_dex with category='abilities'.
+
+        Returns: name, effect (description), rating.
+
+        Examples:
+        - "What does Protosynthesis do?"
+        - "How does Intimidate work?"
 
         Args:
-            ability: Ability name or ID (e.g., "Protosynthesis", "protosynthesis")
-
-        Returns:
-            Ability data including effect description
+            ability: Ability name (e.g., "Protosynthesis", "Intimidate"). Case-insensitive.
         """
         result = await get_dex_ability(ability)
 
@@ -120,13 +142,20 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def dex_item(item: str) -> dict:
-        """Get info about an item.
+        """Get details about a held item including its effect description.
+
+        Use this when you know the exact item name. For finding items by partial name,
+        use search_dex with category='items'. For seeing which Pokemon commonly hold
+        an item in VGC, use find_pokemon_by_item.
+
+        Returns: name, effect (description), fling_power, gen.
+
+        Examples:
+        - "What does Booster Energy do?"
+        - "What is the effect of Choice Scarf?"
 
         Args:
-            item: Item name or ID (e.g., "Booster Energy", "boosterenergy")
-
-        Returns:
-            Item data including effect description
+            item: Item name (e.g., "Booster Energy", "Choice Scarf"). Case-insensitive.
         """
         result = await get_dex_item(item)
 
@@ -145,13 +174,21 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def dex_learnset(pokemon: str) -> dict:
-        """Get all moves a Pokemon can learn.
+        """Get all moves a Pokemon can learn, organized by move type.
+
+        Use this to see a Pokemon's full movepool when building sets. For details about
+        a specific move, use dex_move. For seeing which moves are actually used in VGC,
+        use get_pokemon instead.
+
+        Returns: pokemon, total_moves, by_type{} with each type containing moves with
+        name, category, power, accuracy.
+
+        Examples:
+        - "What moves can Incineroar learn?"
+        - "Does Flutter Mane learn any Ground moves?"
 
         Args:
-            pokemon: Pokemon name or ID
-
-        Returns:
-            List of moves the Pokemon can learn, organized by type
+            pokemon: Pokemon name (e.g., "Incineroar", "Flutter Mane"). Case-insensitive.
         """
         moves = await get_pokemon_learnset(pokemon)
 
@@ -186,16 +223,21 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
         attacking_type: str,
         defending_types: str,
     ) -> dict:
-        """Calculate type effectiveness (e.g., Fire vs Grass/Steel).
+        """Calculate the type effectiveness multiplier for an attacking type vs defending types.
+
+        Use this for raw type calculations (e.g., Fire vs Grass/Steel = 4x). For getting
+        a Pokemon's full defensive type chart, use dex_pokemon_weaknesses instead.
+
+        Returns: attacking_type, defending_types[], multiplier (0.25/0.5/1/2/4),
+        effectiveness description.
+
+        Examples:
+        - "How effective is Fire against Grass/Steel?"
+        - "What's the multiplier for Ghost vs Normal?"
 
         Args:
-            attacking_type: The attacking move's type, capitalized (e.g., "Fire", "Water")
-            defending_types: Defending Pokemon's types, comma-separated, no spaces.
-                Single type: "Grass"
-                Dual type: "Grass,Steel" (NOT "Grass, Steel")
-
-        Returns:
-            Type effectiveness multiplier and details
+            attacking_type: Attacking move's type (e.g., "Fire", "Ghost"). Capitalize first letter.
+            defending_types: Defending types, comma-separated no spaces (e.g., "Grass,Steel").
         """
         def_types = [t.strip() for t in defending_types.split(",")]
 
@@ -212,13 +254,20 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def dex_pokemon_weaknesses(pokemon: str) -> dict:
-        """Get a Pokemon's type weaknesses and resistances.
+        """Get a Pokemon's defensive type chart (weaknesses, resistances, immunities).
+
+        Use this to see what types a Pokemon is weak/resistant to. For calculating a specific
+        type matchup, use dex_type_effectiveness. For analyzing a full team's shared weaknesses,
+        use analyze_team_type_coverage.
+
+        Returns: pokemon, types[], x4_weak[], x2_weak[], x0_5_resist[], x0_25_resist[], immune[].
+
+        Examples:
+        - "What is Incineroar weak to?"
+        - "What types does Flutter Mane resist?"
 
         Args:
-            pokemon: Pokemon name or ID
-
-        Returns:
-            Type matchups including weaknesses (>1x), resistances (<1x), and immunities (0x)
+            pokemon: Pokemon name (e.g., "Incineroar", "Flutter Mane"). Case-insensitive.
         """
         result = await get_pokemon_type_matchups(pokemon)
 
@@ -236,16 +285,23 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
         category: Literal["pokemon", "moves", "abilities", "items"] = "pokemon",
         limit: int = 10,
     ) -> dict:
-        """Search the Pokedex by name.
+        """Search the Pokedex by partial name match across Pokemon, moves, abilities, or items.
+
+        Use this when you don't know the exact name or want to find similar entries.
+        For getting full details once you know the name, use dex_pokemon, dex_move,
+        dex_ability, or dex_item.
+
+        Returns: query, category, count, results[] with name and category-specific fields
+        (types/bst for pokemon, type/power for moves, effect for abilities/items).
+
+        Examples:
+        - "Find Pokemon with 'flutter' in the name"
+        - "Search for moves containing 'moon'"
 
         Args:
-            query: Search query - partial name match, case-insensitive
-                (e.g., "flutter", "incin", "moon")
-            category: What to search - "pokemon", "moves", "abilities", or "items"
-            limit: Maximum results (default 10, max 50)
-
-        Returns:
-            List of matching entries with basic info
+            query: Partial name to search (e.g., "flutter", "incin"). Case-insensitive.
+            category: What to search - "pokemon", "moves", "abilities", or "items".
+            limit: Max results (default 10, max 50).
         """
         try:
             if not query or not query.strip():
@@ -330,14 +386,20 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
         pokemon_type: str,
         limit: int = 20,
     ) -> dict:
-        """Get Pokemon of a specific type.
+        """Get a list of Pokemon that have a specific type.
+
+        Use this to find Pokemon of a type (e.g., all Fairy types). For finding Pokemon
+        that commonly use a specific Tera Type in VGC, use find_pokemon_by_tera instead.
+
+        Returns: type, count, pokemon[] with name, types[], bst.
+
+        Examples:
+        - "List all Fairy type Pokemon"
+        - "What Pokemon are Ghost type?"
 
         Args:
-            pokemon_type: Type to filter by (e.g., "Fairy", "Ghost")
-            limit: Maximum results to return (default 20)
-
-        Returns:
-            List of Pokemon with the specified type
+            pokemon_type: Type name (e.g., "Fairy", "Ghost"). Capitalize first letter.
+            limit: Max results (default 20, max 100).
         """
         try:
             pokemon_type = validate_type_name(pokemon_type)
@@ -372,15 +434,23 @@ def register_pokedex_tools(mcp: FastMCP) -> None:
         category: Literal["Physical", "Special", "Status"] | None = None,
         limit: int = 20,
     ) -> dict:
-        """Get moves of a specific type.
+        """Get a list of moves of a specific type, optionally filtered by category.
+
+        Use this to find strong moves of a type (e.g., best Fairy moves). Results are
+        ordered by base power (highest first). For finding moves a specific Pokemon
+        can learn, use dex_learnset instead.
+
+        Returns: type, category_filter, count, moves[] with name, category, power,
+        accuracy, effect. Sorted by power descending.
+
+        Examples:
+        - "What are the strongest Fairy moves?"
+        - "List all Physical Fighting moves"
 
         Args:
-            move_type: Type name, capitalized (e.g., "Fairy", "Ghost", "Fire")
-            category: Filter by move category - "Physical", "Special", or "Status"
-            limit: Maximum results (default 20)
-
-        Returns:
-            List of moves ordered by base power (highest first)
+            move_type: Type name (e.g., "Fairy", "Fighting"). Capitalize first letter.
+            category: Optional filter - "Physical", "Special", or "Status".
+            limit: Max results (default 20, max 100).
         """
         try:
             move_type = validate_type_name(move_type)

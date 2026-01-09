@@ -50,33 +50,41 @@ def register_damage_tools(mcp: FastMCP) -> None:
         defender_def_boost: int = 0,
         defender_spd_boost: int = 0,
     ) -> dict:
-        """Calculate damage for one Pokemon attacking another.
+        """Calculate damage dealt by one Pokemon attacking another with a specific move.
+
+        Use this for single damage calculations with full modifier support (items, abilities,
+        tera, weather, terrain, stat boosts, screens). For comparing all moves between two
+        Pokemon, use analyze_matchup. For minimum EVs to OHKO, use find_minimum_ohko_evs.
+
+        Returns: description, damage_range, percent_range, ko_chance (e.g., "Guaranteed OHKO"),
+        defender_hp, attacker/defender/move details.
+
+        Examples:
+        - "How much does Urshifu Close Combat do to Incineroar?"
+        - "Can Flutter Mane OHKO Amoonguss with Psychic in Psychic Terrain?"
 
         Args:
-            attacker: Attacking Pokemon name (e.g., "Urshifu")
-            attacker_evs: Attacker EV spread (e.g., "0/252/0/0/4/252")
-            attacker_nature: Attacker nature (e.g., "Jolly")
-            defender: Defending Pokemon name (e.g., "Incineroar")
-            defender_evs: Defender EV spread (e.g., "252/4/84/0/92/76")
-            defender_nature: Defender nature (e.g., "Careful")
-            move: Move name (e.g., "Close Combat")
-            attacker_item: Attacker's held item (e.g., "Choice Band")
-            attacker_ability: Attacker's ability (e.g., "Unseen Fist")
-            defender_item: Defender's held item (e.g., "Sitrus Berry")
-            defender_ability: Defender's ability (e.g., "Intimidate")
-            attacker_tera: Attacker's active Tera type (e.g., "Fighting")
-            weather: Active weather ("Sun", "Rain", "Sand", "Snow")
-            terrain: Active terrain ("Grassy", "Electric", "Psychic", "Misty")
+            attacker: Attacking Pokemon name.
+            attacker_evs: Attacker EV spread (e.g., "0/252/0/0/4/252").
+            attacker_nature: Attacker nature (e.g., "Jolly").
+            defender: Defending Pokemon name.
+            defender_evs: Defender EV spread.
+            defender_nature: Defender nature.
+            move: Move name (e.g., "Close Combat").
+            attacker_item: Attacker's held item (e.g., "Choice Band").
+            attacker_ability: Attacker's ability.
+            defender_item: Defender's held item.
+            defender_ability: Defender's ability (e.g., "Intimidate").
+            attacker_tera: Attacker's active Tera type (e.g., "Fighting").
+            weather: Active weather ("Sun", "Rain", "Sand", "Snow").
+            terrain: Active terrain ("Grassy", "Electric", "Psychic", "Misty").
             helping_hand: Is Helping Hand boosting the attack?
-            reflect: Is Reflect active on defender's side?
-            light_screen: Is Light Screen active on defender's side?
-            attacker_atk_boost: Attack stat stage (-6 to +6)
-            attacker_spa_boost: Special Attack stat stage (-6 to +6)
-            defender_def_boost: Defense stat stage (-6 to +6)
-            defender_spd_boost: Special Defense stat stage (-6 to +6)
-
-        Returns:
-            Damage calculation with range, percentages, and KO chance
+            reflect: Is Reflect active?
+            light_screen: Is Light Screen active?
+            attacker_atk_boost: Attack stat stage (-6 to +6).
+            attacker_spa_boost: Special Attack stat stage (-6 to +6).
+            defender_def_boost: Defense stat stage (-6 to +6).
+            defender_spd_boost: Special Defense stat stage (-6 to +6).
         """
         try:
             validate_pokemon_name(attacker)
@@ -155,24 +163,32 @@ def register_damage_tools(mcp: FastMCP) -> None:
         pokemon2_item: str | None = None,
         pokemon2_ability: str | None = None,
     ) -> dict:
-        """Analyze a full matchup between two Pokemon, calculating damage both ways.
+        """Analyze full matchup between two Pokemon by calculating damage for all moves both ways.
+
+        Use this to compare two Pokemon head-to-head with their full movesets. For a single
+        damage calc, use calculate_damage. For EV spreads that survive attacks, use
+        find_minimum_survival_evs.
+
+        Returns: pokemon1{name, item, ability, attacks[]}, pokemon2{name, item, ability,
+        attacks[]}, summary{pokemon1_best_attack, pokemon2_best_attack}.
+
+        Examples:
+        - "How does Urshifu match up against Incineroar?"
+        - "Can Flutter Mane beat Amoonguss 1v1?"
 
         Args:
-            pokemon1: First Pokemon name
-            pokemon1_evs: First Pokemon's EV spread
-            pokemon1_nature: First Pokemon's nature
-            pokemon1_moves: First Pokemon's moves (list of up to 4)
-            pokemon2: Second Pokemon name
-            pokemon2_evs: Second Pokemon's EV spread
-            pokemon2_nature: Second Pokemon's nature
-            pokemon2_moves: Second Pokemon's moves (list of up to 4)
-            pokemon1_item: First Pokemon's item
-            pokemon1_ability: First Pokemon's ability
-            pokemon2_item: Second Pokemon's item
-            pokemon2_ability: Second Pokemon's ability
-
-        Returns:
-            Complete matchup analysis with damage calcs for all moves both ways
+            pokemon1: First Pokemon name.
+            pokemon1_evs: First Pokemon's EV spread.
+            pokemon1_nature: First Pokemon's nature.
+            pokemon1_moves: First Pokemon's moves (list of up to 4).
+            pokemon2: Second Pokemon name.
+            pokemon2_evs: Second Pokemon's EV spread.
+            pokemon2_nature: Second Pokemon's nature.
+            pokemon2_moves: Second Pokemon's moves (list of up to 4).
+            pokemon1_item: First Pokemon's item.
+            pokemon1_ability: First Pokemon's ability.
+            pokemon2_item: Second Pokemon's item.
+            pokemon2_ability: Second Pokemon's ability.
         """
         try:
             validate_pokemon_name(pokemon1)
@@ -269,23 +285,29 @@ def register_damage_tools(mcp: FastMCP) -> None:
         attacker_item: str | None = None,
         attacker_ability: str | None = None,
     ) -> dict:
-        """Calculate physical damage after Intimidate (-1 Attack).
+        """Calculate physical damage before and after Intimidate (-1 Attack).
 
-        Common VGC scenario: checking how much damage drops after Incineroar's Intimidate.
+        Use this for the common VGC scenario of checking damage drop after Incineroar's
+        Intimidate. For general stat boost calculations, use calculate_damage with
+        attacker_atk_boost=-1.
+
+        Returns: attacker, defender, move, normal{damage, ko_chance}, after_intimidate{damage,
+        ko_chance}, damage_reduction percentage.
+
+        Examples:
+        - "How much does Intimidate reduce Urshifu's Close Combat damage?"
+        - "Can Chien-Pao still OHKO after Intimidate?"
 
         Args:
-            attacker: Attacking Pokemon name
-            attacker_evs: Attacker EV spread
-            attacker_nature: Attacker nature
-            defender: Defending Pokemon name
-            defender_evs: Defender EV spread
-            defender_nature: Defender nature
-            move: Move name
-            attacker_item: Attacker's item
-            attacker_ability: Attacker's ability
-
-        Returns:
-            Damage comparison: normal vs after Intimidate
+            attacker: Attacking Pokemon name.
+            attacker_evs: Attacker EV spread.
+            attacker_nature: Attacker nature.
+            defender: Defending Pokemon name.
+            defender_evs: Defender EV spread.
+            defender_nature: Defender nature.
+            move: Physical move name.
+            attacker_item: Attacker's item.
+            attacker_ability: Attacker's ability.
         """
         try:
             validate_pokemon_name(attacker)
