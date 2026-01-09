@@ -54,15 +54,21 @@ class TestRefreshUsageStats:
         """Test returning errors when fetch fails."""
         mock_fetch.return_value = {
             "success": [],
-            "failed": [{"month": "2025-12", "error": "Network error"}],
+            "failed": [{"month": "2025-12", "elo": 1500}],
+            "errors": [
+                {"month": "2025-12", "elo": 1500, "category": "network", "message": "Error"}
+            ],
             "total_pokemon": 0,
+            "circuit_states": {},
         }
 
         refresh_usage_stats = mock_mcp.tools["refresh_usage_stats"]
         result = await refresh_usage_stats()
 
+        assert result["status"] == "partial"
         assert result["failed_fetches"] == 1
-        assert result["errors"] is not None
+        assert result["failed_details"] is not None
+        assert result["error_details"] is not None
 
 
 class TestGetUsageStatsStatus:
@@ -157,11 +163,12 @@ class TestRefreshPokepasteData:
         """Test returning fetch results."""
         mock_fetch.return_value = {
             "total_teams": 100,
-            "success": 95,
-            "failed": 5,
+            "success": 100,
+            "failed": 0,
             "skipped": 0,
             "success_details": [],
             "failed_details": [],
+            "circuit_states": {},
         }
 
         refresh_pokepaste_data = mock_mcp.tools["refresh_pokepaste_data"]
@@ -169,7 +176,7 @@ class TestRefreshPokepasteData:
 
         assert result["status"] == "completed"
         assert result["total_teams"] == 100
-        assert result["successfully_parsed"] == 95
+        assert result["successfully_parsed"] == 100
 
 
 class TestGetPokepasteDataStatus:

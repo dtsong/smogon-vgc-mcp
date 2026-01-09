@@ -11,7 +11,9 @@ from smogon_vgc_mcp.utils.formatting import (
 )
 from smogon_vgc_mcp.utils.http_client import (
     fetch_json,
+    fetch_json_resilient,
     fetch_text,
+    fetch_text_resilient,
 )
 from smogon_vgc_mcp.utils.limits import (
     DEFAULT_MAX_LIMIT,
@@ -26,6 +28,7 @@ from smogon_vgc_mcp.utils.limits import (
     cap_limit,
 )
 from smogon_vgc_mcp.utils.responses import (
+    make_degraded_response,
     make_error_response,
 )
 from smogon_vgc_mcp.utils.stat_names import (
@@ -39,17 +42,24 @@ from smogon_vgc_mcp.utils.validators import (
     VALID_TERRAIN,
     VALID_WEATHER,
     ValidationError,
+    validate_ability_name,
     validate_elo_bracket,
     validate_ev_spread,
     validate_format_code,
+    validate_item_name,
     validate_iv_spread,
     validate_level,
     validate_limit,
+    validate_month,
+    validate_move_name,
     validate_nature,
     validate_pokemon_list,
     validate_pokemon_name,
+    validate_query_string,
+    validate_replay_url,
     validate_stat_boost,
     validate_stat_boosts,
+    validate_team_id,
     validate_terrain,
     validate_type_list,
     validate_type_name,
@@ -69,7 +79,9 @@ __all__ = [
     "default_ivs",
     # HTTP client
     "fetch_json",
+    "fetch_json_resilient",
     "fetch_text",
+    "fetch_text_resilient",
     # Limits
     "cap_limit",
     "DEFAULT_MAX_LIMIT",
@@ -85,6 +97,7 @@ __all__ = [
     # Formatting
     "round_percent",
     # Responses
+    "make_degraded_response",
     "make_error_response",
     # Validators
     "ValidationError",
@@ -103,6 +116,13 @@ __all__ = [
     "validate_limit",
     "validate_pokemon_list",
     "validate_type_list",
+    "validate_move_name",
+    "validate_item_name",
+    "validate_ability_name",
+    "validate_month",
+    "validate_replay_url",
+    "validate_query_string",
+    "validate_team_id",
     "VALID_WEATHER",
     "VALID_TERRAIN",
     "VALID_ELO_BRACKETS",

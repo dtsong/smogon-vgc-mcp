@@ -1,6 +1,9 @@
 """Standardized response builders for MCP tools."""
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from smogon_vgc_mcp.resilience import ServiceError
 
 
 def make_error_response(
@@ -33,3 +36,35 @@ def make_error_response(
         result["hint"] = hint
     result.update(extra)
     return result
+
+
+def make_degraded_response(
+    data: dict[str, Any],
+    stale_since: str | None = None,
+    errors: list["ServiceError"] | None = None,
+) -> dict[str, Any]:
+    """Create a response with stale data warning.
+
+    Use when returning cached data because external services are unavailable.
+
+    Args:
+        data: The stale data to return
+        stale_since: ISO timestamp of when data was last refreshed
+        errors: Optional list of ServiceError objects describing what failed
+
+    Returns:
+        Data dictionary with _warning field added
+    """
+    warning: dict[str, Any] = {
+        "type": "stale_data",
+        "message": "Data may be outdated. External service unavailable.",
+    }
+    if stale_since:
+        warning["stale_since"] = stale_since
+    if errors:
+        warning["errors"] = [e.to_dict() for e in errors]
+
+    return {
+        **data,
+        "_warning": warning,
+    }

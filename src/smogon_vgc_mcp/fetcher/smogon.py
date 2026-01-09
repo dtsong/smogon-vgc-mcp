@@ -9,12 +9,13 @@ import aiosqlite
 
 from smogon_vgc_mcp.database.schema import get_connection, get_db_path, init_database
 from smogon_vgc_mcp.formats import DEFAULT_FORMAT, get_format, get_smogon_stats_url
-from smogon_vgc_mcp.utils import fetch_json
+from smogon_vgc_mcp.resilience import FetchResult, get_all_circuit_states
+from smogon_vgc_mcp.utils import fetch_json_resilient
 
 logger = logging.getLogger(__name__)
 
 
-async def fetch_vgc_data(format_code: str, month: str, elo: int) -> dict | None:
+async def fetch_vgc_data(format_code: str, month: str, elo: int) -> FetchResult[dict]:
     """Fetch VGC data from Smogon for a specific format, month and ELO bracket.
 
     Args:
@@ -23,10 +24,10 @@ async def fetch_vgc_data(format_code: str, month: str, elo: int) -> dict | None:
         elo: ELO bracket (0, 1500, 1630, 1760)
 
     Returns:
-        Parsed JSON data or None if fetch failed
+        FetchResult with parsed JSON data or error information
     """
     url = get_smogon_stats_url(format_code, month, elo)
-    return await fetch_json(url)
+    return await fetch_json_resilient(url, service="smogon")
 
 
 def parse_spread(spread_str: str) -> dict | None:
@@ -207,7 +208,7 @@ async def fetch_and_store_all(
         db_path: Optional database path
 
     Returns:
-        Dict with fetch results
+        Dict with fetch results including error details and circuit states
     """
     fmt = get_format(format_code)
 
@@ -223,17 +224,18 @@ async def fetch_and_store_all(
 
     success: list[dict] = []
     failed: list[dict] = []
+    errors: list[dict] = []
     total_pokemon = 0
 
     async with get_connection(db_path) as db:
         for month in months:
             for elo in elos:
                 logger.info("Fetching %s %s ELO %s", fmt.name, month, elo)
-                data = await fetch_vgc_data(format_code, month, elo)
+                result = await fetch_vgc_data(format_code, month, elo)
 
-                if data:
-                    await store_snapshot_data(db, format_code, month, elo, data)
-                    pokemon_count = len(data.get("data", {}))
+                if result.success and result.data:
+                    await store_snapshot_data(db, format_code, month, elo, result.data)
+                    pokemon_count = len(result.data.get("data", {}))
                     success.append(
                         {
                             "month": month,
@@ -247,10 +249,18 @@ async def fetch_and_store_all(
                     )
                 else:
                     failed.append({"month": month, "elo": elo})
+                    if result.error:
+                        errors.append({
+                            "month": month,
+                            "elo": elo,
+                            **result.error.to_dict(),
+                        })
                     logger.error("Failed to fetch %s %s ELO %s", fmt.name, month, elo)
 
     return {
         "success": success,
         "failed": failed,
+        "errors": errors,
         "total_pokemon": total_pokemon,
+        "circuit_states": get_all_circuit_states(),
     }

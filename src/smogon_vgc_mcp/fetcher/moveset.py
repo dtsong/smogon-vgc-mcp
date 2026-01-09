@@ -8,12 +8,13 @@ import aiosqlite
 
 from smogon_vgc_mcp.database.schema import get_connection, get_db_path, init_database
 from smogon_vgc_mcp.formats import DEFAULT_FORMAT, get_format, get_moveset_url
-from smogon_vgc_mcp.utils import fetch_text
+from smogon_vgc_mcp.resilience import FetchResult, get_all_circuit_states
+from smogon_vgc_mcp.utils import fetch_text_resilient
 
 logger = logging.getLogger(__name__)
 
 
-async def fetch_moveset_text(format_code: str, month: str, elo: int) -> str | None:
+async def fetch_moveset_text(format_code: str, month: str, elo: int) -> FetchResult[str]:
     """Fetch raw moveset text file from Smogon.
 
     Args:
@@ -22,10 +23,10 @@ async def fetch_moveset_text(format_code: str, month: str, elo: int) -> str | No
         elo: ELO bracket (0, 1500, 1630, 1760)
 
     Returns:
-        Raw text content or None if fetch failed
+        FetchResult with raw text content or error information
     """
     url = get_moveset_url(format_code, month, elo)
-    return await fetch_text(url)
+    return await fetch_text_resilient(url, service="smogon")
 
 
 def parse_pokemon_blocks(text: str) -> list[tuple[str, str]]:
@@ -275,9 +276,12 @@ async def fetch_and_store_moveset(
     if db_path is None:
         db_path = get_db_path()
 
-    text = await fetch_moveset_text(format_code, month, elo)
-    if not text:
-        return {"success": False, "month": month, "elo": elo, "error": "fetch_failed"}
+    result = await fetch_moveset_text(format_code, month, elo)
+    if not result.success or not result.data:
+        error_info = result.error.to_dict() if result.error else {"message": "fetch_failed"}
+        return {"success": False, "month": month, "elo": elo, "error": error_info}
+
+    text = result.data
 
     # Parse all Pokemon blocks
     blocks = parse_pokemon_blocks(text)
@@ -362,4 +366,5 @@ async def fetch_and_store_moveset_all(
         "success": success,
         "failed": failed,
         "total_pokemon_updated": total_pokemon,
+        "circuit_states": get_all_circuit_states(),
     }

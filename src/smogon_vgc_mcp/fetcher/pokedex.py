@@ -7,7 +7,8 @@ from pathlib import Path
 import aiosqlite
 
 from smogon_vgc_mcp.database.schema import get_connection, get_db_path, init_database
-from smogon_vgc_mcp.utils import fetch_json, fetch_text
+from smogon_vgc_mcp.resilience import get_all_circuit_states
+from smogon_vgc_mcp.utils import fetch_json_resilient, fetch_text_resilient
 
 # Pokemon Showdown data URLs
 POKEDEX_JSON_URL = "https://play.pokemonshowdown.com/data/pokedex.json"
@@ -557,7 +558,7 @@ async def fetch_and_store_pokedex_all(db_path: Path | None = None) -> dict:
     """Fetch and store all Pokedex data.
 
     Returns:
-        Dict with fetch results
+        Dict with fetch results including error details and circuit states
     """
     if db_path is None:
         db_path = get_db_path()
@@ -565,7 +566,7 @@ async def fetch_and_store_pokedex_all(db_path: Path | None = None) -> dict:
     # Initialize database
     await init_database(db_path)
 
-    errors: list[str] = []
+    errors: list[dict] = []
     pokemon_count = 0
     moves_count = 0
     abilities_count = 0
@@ -576,50 +577,65 @@ async def fetch_and_store_pokedex_all(db_path: Path | None = None) -> dict:
     async with get_connection(db_path) as db:
         # Fetch and store Pokemon
         print("Fetching Pokemon data...")
-        pokemon_data = await fetch_json(POKEDEX_JSON_URL)
-        if pokemon_data:
-            pokemon_count = await store_pokemon_data(db, pokemon_data)
+        pokemon_result = await fetch_json_resilient(POKEDEX_JSON_URL, service="showdown")
+        if pokemon_result.success and pokemon_result.data:
+            pokemon_count = await store_pokemon_data(db, pokemon_result.data)
             print(f"  Stored {pokemon_count} Pokemon")
         else:
-            errors.append("Failed to fetch Pokemon data")
+            error_info = {"source": "Pokemon", "message": "Failed to fetch Pokemon data"}
+            if pokemon_result.error:
+                error_info.update(pokemon_result.error.to_dict())
+            errors.append(error_info)
 
         # Fetch and store Moves
         print("Fetching Moves data...")
-        moves_data = await fetch_json(MOVES_JSON_URL)
-        if moves_data:
-            moves_count = await store_moves_data(db, moves_data)
+        moves_result = await fetch_json_resilient(MOVES_JSON_URL, service="showdown")
+        if moves_result.success and moves_result.data:
+            moves_count = await store_moves_data(db, moves_result.data)
             print(f"  Stored {moves_count} moves")
         else:
-            errors.append("Failed to fetch Moves data")
+            error_info = {"source": "Moves", "message": "Failed to fetch Moves data"}
+            if moves_result.error:
+                error_info.update(moves_result.error.to_dict())
+            errors.append(error_info)
 
         # Fetch and store Abilities (from TypeScript)
         print("Fetching Abilities data...")
-        abilities_ts = await fetch_text(ABILITIES_TS_URL)
-        if abilities_ts:
-            abilities_data = parse_ts_object(abilities_ts, "Abilities")
+        abilities_result = await fetch_text_resilient(ABILITIES_TS_URL, service="showdown")
+        if abilities_result.success and abilities_result.data:
+            abilities_data = parse_ts_object(abilities_result.data, "Abilities")
             abilities_count = await store_abilities_data(db, abilities_data)
             print(f"  Stored {abilities_count} abilities")
         else:
-            errors.append("Failed to fetch Abilities data")
+            error_info = {"source": "Abilities", "message": "Failed to fetch Abilities data"}
+            if abilities_result.error:
+                error_info.update(abilities_result.error.to_dict())
+            errors.append(error_info)
 
         # Fetch and store Items (from TypeScript)
         print("Fetching Items data...")
-        items_ts = await fetch_text(ITEMS_TS_URL)
-        if items_ts:
-            items_data = parse_ts_object(items_ts, "Items")
+        items_result = await fetch_text_resilient(ITEMS_TS_URL, service="showdown")
+        if items_result.success and items_result.data:
+            items_data = parse_ts_object(items_result.data, "Items")
             items_count = await store_items_data(db, items_data)
             print(f"  Stored {items_count} items")
         else:
-            errors.append("Failed to fetch Items data")
+            error_info = {"source": "Items", "message": "Failed to fetch Items data"}
+            if items_result.error:
+                error_info.update(items_result.error.to_dict())
+            errors.append(error_info)
 
         # Fetch and store Learnsets
         print("Fetching Learnsets data...")
-        learnsets_data = await fetch_json(LEARNSETS_JSON_URL)
-        if learnsets_data:
-            learnsets_count = await store_learnsets_data(db, learnsets_data)
+        learnsets_result = await fetch_json_resilient(LEARNSETS_JSON_URL, service="showdown")
+        if learnsets_result.success and learnsets_result.data:
+            learnsets_count = await store_learnsets_data(db, learnsets_result.data)
             print(f"  Stored {learnsets_count} learnset entries")
         else:
-            errors.append("Failed to fetch Learnsets data")
+            error_info = {"source": "Learnsets", "message": "Failed to fetch Learnsets data"}
+            if learnsets_result.error:
+                error_info.update(learnsets_result.error.to_dict())
+            errors.append(error_info)
 
         # Store Type Chart
         print("Storing Type Chart...")
@@ -634,4 +650,5 @@ async def fetch_and_store_pokedex_all(db_path: Path | None = None) -> dict:
         "learnsets": learnsets_count,
         "type_chart": type_chart_count,
         "errors": errors if errors else None,
+        "circuit_states": get_all_circuit_states(),
     }

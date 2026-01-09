@@ -3,17 +3,18 @@
 import re
 
 from smogon_vgc_mcp.database.models import TeamPokemon
-from smogon_vgc_mcp.utils import fetch_text, parse_ev_string, parse_iv_string
+from smogon_vgc_mcp.resilience import FetchResult
+from smogon_vgc_mcp.utils import fetch_text_resilient, parse_ev_string, parse_iv_string
 
 
-async def fetch_pokepaste(url: str) -> str | None:
+async def fetch_pokepaste(url: str) -> FetchResult[str]:
     """Fetch raw paste content from pokepast.es.
 
     Args:
         url: The pokepaste URL (e.g., https://pokepast.es/abc123)
 
     Returns:
-        Raw paste text or None if fetch failed
+        FetchResult with raw paste text or error information
     """
     # Convert to raw URL format
     if not url.endswith("/raw"):
@@ -21,7 +22,7 @@ async def fetch_pokepaste(url: str) -> str | None:
     else:
         raw_url = url
 
-    return await fetch_text(raw_url, timeout=30.0, verify=False)
+    return await fetch_text_resilient(raw_url, service="pokepaste", timeout=30.0, verify=False)
 
 
 def parse_pokepaste(text: str) -> list[TeamPokemon]:

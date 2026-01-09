@@ -8,6 +8,9 @@ import aiosqlite
 # Default database path
 DEFAULT_DB_PATH = Path(__file__).parent.parent.parent.parent / "data" / "vgc_stats.db"
 
+# Database connection timeout in seconds
+DB_TIMEOUT = 30.0
+
 SCHEMA = """
 -- Metadata about each data snapshot
 CREATE TABLE IF NOT EXISTS snapshots (
@@ -303,7 +306,7 @@ async def init_database(db_path: Path | None = None) -> None:
     # Ensure directory exists
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
-    async with aiosqlite.connect(db_path) as db:
+    async with aiosqlite.connect(db_path, timeout=DB_TIMEOUT) as db:
         await db.executescript(SCHEMA)
         await migrate_add_format_column(db)
         await db.commit()
@@ -319,4 +322,4 @@ def get_connection(db_path: Path | None = None) -> aiosqlite.Connection:
     if db_path is None:
         db_path = get_db_path()
 
-    return aiosqlite.connect(db_path)
+    return aiosqlite.connect(db_path, timeout=DB_TIMEOUT)

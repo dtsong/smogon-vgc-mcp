@@ -10,11 +10,13 @@ from smogon_vgc_mcp.fetcher import (
     fetch_and_store_pokepaste_teams,
 )
 from smogon_vgc_mcp.formats import DEFAULT_FORMAT, FORMATS, get_format
+from smogon_vgc_mcp.resilience import get_all_circuit_states
 from smogon_vgc_mcp.utils import (
     ValidationError,
     make_error_response,
     validate_elo_bracket,
     validate_format_code,
+    validate_month,
 )
 
 
@@ -47,6 +49,8 @@ def register_admin_tools(mcp: FastMCP) -> None:
         """
         try:
             validate_format_code(format)
+            if month is not None:
+                month = validate_month(month)
             if elo is not None:
                 validate_elo_bracket(elo)
         except ValidationError as e:
@@ -57,15 +61,25 @@ def register_admin_tools(mcp: FastMCP) -> None:
 
         results = await fetch_and_store_all(format_code=format, months=months, elos=elos)
 
-        return {
-            "status": "completed",
+        status = "completed" if not results["failed"] else "partial"
+
+        response = {
+            "status": status,
             "format": format,
             "successful_fetches": len(results["success"]),
             "failed_fetches": len(results["failed"]),
             "total_pokemon_records": results["total_pokemon"],
             "details": results["success"],
-            "errors": results["failed"] if results["failed"] else None,
         }
+
+        if results["failed"]:
+            response["failed_details"] = results["failed"]
+        if results.get("errors"):
+            response["error_details"] = results["errors"][:5]
+        if results.get("circuit_states"):
+            response["circuit_states"] = results["circuit_states"]
+
+        return response
 
     @mcp.tool()
     async def get_usage_stats_status(format: str | None = None) -> dict:
@@ -149,6 +163,8 @@ def register_admin_tools(mcp: FastMCP) -> None:
         """
         try:
             validate_format_code(format)
+            if month is not None:
+                month = validate_month(month)
             if elo is not None:
                 validate_elo_bracket(elo)
         except ValidationError as e:
@@ -159,15 +175,23 @@ def register_admin_tools(mcp: FastMCP) -> None:
 
         results = await fetch_and_store_moveset_all(format_code=format, months=months, elos=elos)
 
-        return {
-            "status": "completed",
+        status = "completed" if not results["failed"] else "partial"
+
+        response = {
+            "status": status,
             "format": format,
             "successful_fetches": len(results["success"]),
             "failed_fetches": len(results["failed"]),
             "total_pokemon_updated": results["total_pokemon_updated"],
             "details": results["success"],
-            "errors": results["failed"] if results["failed"] else None,
         }
+
+        if results["failed"]:
+            response["failed_details"] = results["failed"]
+        if results.get("circuit_states"):
+            response["circuit_states"] = results["circuit_states"]
+
+        return response
 
     @mcp.tool()
     async def refresh_pokepaste_data(
@@ -197,8 +221,19 @@ def register_admin_tools(mcp: FastMCP) -> None:
 
         results = await fetch_and_store_pokepaste_teams(format_code=format, max_teams=max_teams)
 
-        return {
-            "status": "completed",
+        # Check if the initial sheet fetch failed
+        if results.get("error"):
+            return {
+                "status": "failed",
+                "format": format,
+                "error": results["error"],
+                "circuit_states": results.get("circuit_states"),
+            }
+
+        status = "completed" if results["failed"] == 0 else "partial"
+
+        response = {
+            "status": status,
             "format": format,
             "total_teams": results["total_teams"],
             "successfully_parsed": results["success"],
@@ -207,6 +242,11 @@ def register_admin_tools(mcp: FastMCP) -> None:
             "sample_success": results["success_details"],
             "sample_failures": results["failed_details"],
         }
+
+        if results.get("circuit_states"):
+            response["circuit_states"] = results["circuit_states"]
+
+        return response
 
     @mcp.tool()
     async def get_pokepaste_data_status(format: str | None = None) -> dict:
@@ -265,16 +305,25 @@ def register_admin_tools(mcp: FastMCP) -> None:
         """
         results = await fetch_and_store_pokedex_all()
 
-        return {
-            "status": "completed",
+        has_errors = bool(results.get("errors"))
+        status = "completed" if not has_errors else "partial"
+
+        response = {
+            "status": status,
             "pokemon_count": results["pokemon"],
             "moves_count": results["moves"],
             "abilities_count": results["abilities"],
             "items_count": results["items"],
             "learnsets_count": results["learnsets"],
             "type_chart_count": results["type_chart"],
-            "errors": results.get("errors"),
         }
+
+        if results.get("errors"):
+            response["error_details"] = results["errors"]
+        if results.get("circuit_states"):
+            response["circuit_states"] = results["circuit_states"]
+
+        return response
 
     @mcp.tool()
     async def get_pokedex_data_status() -> dict:
@@ -341,4 +390,33 @@ def register_admin_tools(mcp: FastMCP) -> None:
             "formats": formats,
             "current_format": current["code"] if current else None,
             "default_format": DEFAULT_FORMAT,
+        }
+
+    @mcp.tool()
+    async def get_service_health() -> dict:
+        """Get health status of external services including circuit breaker states.
+
+        Use this to check if external services (Smogon, Pokemon Showdown, Google Sheets,
+        Pokepaste) are available or experiencing issues. Shows circuit breaker states
+        that protect against cascading failures.
+
+        Returns: services{service_name: {state, failure_count, last_failure, recovery_at}},
+        state_descriptions{}.
+
+        States:
+        - closed: Service operating normally
+        - open: Service unavailable, requests being rejected until recovery_at
+        - half_open: Testing if service has recovered
+
+        Examples:
+        - "Are external services healthy?"
+        - "Why are my refresh requests failing?"
+        """
+        return {
+            "services": get_all_circuit_states(),
+            "state_descriptions": {
+                "closed": "Service operating normally",
+                "open": "Service unavailable, requests being rejected",
+                "half_open": "Testing if service has recovered",
+            },
         }

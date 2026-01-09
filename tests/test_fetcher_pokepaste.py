@@ -368,20 +368,25 @@ class TestFetchPokepaste:
     """Tests for fetch_pokepaste async function."""
 
     @pytest.mark.asyncio
-    @patch("smogon_vgc_mcp.fetcher.pokepaste.fetch_text")
+    @patch("smogon_vgc_mcp.fetcher.pokepaste.fetch_text_resilient")
     async def test_fetch_success(self, mock_fetch_text):
         """Test successful pokepaste fetch."""
-        mock_fetch_text.return_value = "Pokemon @ Item\n- Move"
+        from smogon_vgc_mcp.resilience import FetchResult
+
+        mock_fetch_text.return_value = FetchResult.ok("Pokemon @ Item\n- Move")
 
         result = await fetch_pokepaste("https://pokepast.es/abc123")
 
-        assert result == "Pokemon @ Item\n- Move"
+        assert result.success is True
+        assert result.data == "Pokemon @ Item\n- Move"
 
     @pytest.mark.asyncio
-    @patch("smogon_vgc_mcp.fetcher.pokepaste.fetch_text")
+    @patch("smogon_vgc_mcp.fetcher.pokepaste.fetch_text_resilient")
     async def test_fetch_adds_raw_suffix(self, mock_fetch_text):
         """Test that /raw is appended to URL."""
-        mock_fetch_text.return_value = "content"
+        from smogon_vgc_mcp.resilience import FetchResult
+
+        mock_fetch_text.return_value = FetchResult.ok("content")
 
         await fetch_pokepaste("https://pokepast.es/abc123")
 
@@ -390,10 +395,12 @@ class TestFetchPokepaste:
         assert call_args[0][0] == "https://pokepast.es/abc123/raw"
 
     @pytest.mark.asyncio
-    @patch("smogon_vgc_mcp.fetcher.pokepaste.fetch_text")
+    @patch("smogon_vgc_mcp.fetcher.pokepaste.fetch_text_resilient")
     async def test_fetch_handles_trailing_slash(self, mock_fetch_text):
         """Test URL handling with trailing slash."""
-        mock_fetch_text.return_value = "content"
+        from smogon_vgc_mcp.resilience import FetchResult
+
+        mock_fetch_text.return_value = FetchResult.ok("content")
 
         await fetch_pokepaste("https://pokepast.es/abc123/")
 
@@ -401,10 +408,12 @@ class TestFetchPokepaste:
         assert call_args[0][0] == "https://pokepast.es/abc123/raw"
 
     @pytest.mark.asyncio
-    @patch("smogon_vgc_mcp.fetcher.pokepaste.fetch_text")
+    @patch("smogon_vgc_mcp.fetcher.pokepaste.fetch_text_resilient")
     async def test_fetch_already_has_raw(self, mock_fetch_text):
         """Test URL that already ends with /raw."""
-        mock_fetch_text.return_value = "content"
+        from smogon_vgc_mcp.resilience import FetchResult
+
+        mock_fetch_text.return_value = FetchResult.ok("content")
 
         await fetch_pokepaste("https://pokepast.es/abc123/raw")
 
@@ -412,14 +421,23 @@ class TestFetchPokepaste:
         assert call_args[0][0] == "https://pokepast.es/abc123/raw"
 
     @pytest.mark.asyncio
-    @patch("smogon_vgc_mcp.fetcher.pokepaste.fetch_text")
+    @patch("smogon_vgc_mcp.fetcher.pokepaste.fetch_text_resilient")
     async def test_fetch_http_error(self, mock_fetch_text):
-        """Test handling of HTTP error (returns None)."""
-        mock_fetch_text.return_value = None
+        """Test handling of HTTP error (returns FetchResult with error)."""
+        from smogon_vgc_mcp.resilience import ErrorCategory, FetchResult, ServiceError
+
+        mock_fetch_text.return_value = FetchResult.fail(
+            ServiceError(
+                category=ErrorCategory.NETWORK,
+                service="pokepaste",
+                message="Connection failed",
+            )
+        )
 
         result = await fetch_pokepaste("https://pokepast.es/invalid")
 
-        assert result is None
+        assert result.success is False
+        assert result.error is not None
 
 
 class TestIntegrationParsing:

@@ -11,31 +11,36 @@ import aiosqlite
 from smogon_vgc_mcp.database.schema import get_connection, get_db_path, init_database
 from smogon_vgc_mcp.fetcher.pokepaste import fetch_pokepaste, parse_pokepaste
 from smogon_vgc_mcp.formats import DEFAULT_FORMAT, get_format, get_sheet_csv_url
-from smogon_vgc_mcp.utils import fetch_text
+from smogon_vgc_mcp.resilience import FetchResult, get_all_circuit_states
+from smogon_vgc_mcp.utils import fetch_text_resilient
 
 logger = logging.getLogger(__name__)
 
 
-async def fetch_teams_from_sheet(format_code: str) -> list[dict]:
+async def fetch_teams_from_sheet(format_code: str) -> FetchResult[list[dict]]:
     """Fetch teams from Google Sheet for a specific format.
 
     Args:
         format_code: Format code (e.g., "regf")
 
     Returns:
-        List of dicts with team metadata
+        FetchResult with list of dicts containing team metadata
     """
     fmt = get_format(format_code)
     sheet_url = get_sheet_csv_url(format_code)
 
     if not sheet_url:
         logger.warning("No Google Sheet configured for %s", fmt.name)
-        return []
+        return FetchResult.ok([])
 
-    csv_text = await fetch_text(sheet_url)
-    if not csv_text:
+    result = await fetch_text_resilient(sheet_url, service="sheets")
+    if not result.success or not result.data:
         logger.error("Failed to fetch sheet for %s", fmt.name)
-        return []
+        if result.error:
+            return FetchResult.fail(result.error)
+        return FetchResult.ok([])
+
+    csv_text = result.data
 
     # Parse CSV as raw rows (no header inference - the sheet has complex multi-row headers)
     reader = csv.reader(io.StringIO(csv_text))
@@ -90,7 +95,7 @@ async def fetch_teams_from_sheet(format_code: str) -> list[dict]:
 
         teams.append(team)
 
-    return teams
+    return FetchResult.ok(teams)
 
 
 async def store_team(db: aiosqlite.Connection, format_code: str, team: dict) -> int | None:
@@ -188,14 +193,27 @@ async def fetch_and_store_pokepaste_teams(
         delay_between_fetches: Delay between pokepaste fetches to be polite
 
     Returns:
-        Dict with results summary
+        Dict with results summary including error details and circuit states
     """
     fmt = get_format(format_code)
     db_path = get_db_path()
     await init_database(db_path)
 
     logger.info("Fetching team list from Google Sheet for %s", fmt.name)
-    teams = await fetch_teams_from_sheet(format_code)
+    teams_result = await fetch_teams_from_sheet(format_code)
+
+    if not teams_result.success:
+        error_info = teams_result.error.to_dict() if teams_result.error else {}
+        return {
+            "total_teams": 0,
+            "success": 0,
+            "failed": 0,
+            "skipped": 0,
+            "error": {"source": "sheets", "message": "Failed to fetch team list", **error_info},
+            "circuit_states": get_all_circuit_states(),
+        }
+
+    teams = teams_result.data or []
     logger.info("Found %d teams for %s", len(teams), fmt.name)
 
     if max_teams:
@@ -224,9 +242,9 @@ async def fetch_and_store_pokepaste_teams(
             logger.info("Processing %s (%d/%d)", team_id, i + 1, len(teams))
 
             # Fetch and parse pokepaste
-            paste_text = await fetch_pokepaste(pokepaste_url)
-            if paste_text:
-                pokemon_list = parse_pokepaste(paste_text)
+            paste_result = await fetch_pokepaste(pokepaste_url)
+            if paste_result.success and paste_result.data:
+                pokemon_list = parse_pokepaste(paste_result.data)
                 await store_team_pokemon(db, team_db_id, pokemon_list)
                 success.append(
                     {
@@ -236,7 +254,8 @@ async def fetch_and_store_pokepaste_teams(
                 )
                 logger.info("Stored %d Pokemon for team %s", len(pokemon_list), team_id)
             else:
-                failed.append({"team_id": team_id, "url": pokepaste_url})
+                error_info = paste_result.error.to_dict() if paste_result.error else {}
+                failed.append({"team_id": team_id, "url": pokepaste_url, **error_info})
                 logger.error("Failed to fetch pokepaste for team %s: %s", team_id, pokepaste_url)
 
             await db.commit()
@@ -253,4 +272,5 @@ async def fetch_and_store_pokepaste_teams(
         "success_details": success[:10],  # Limit details in response
         "failed_details": failed[:10],
         "skipped_details": skipped[:10],
+        "circuit_states": get_all_circuit_states(),
     }
