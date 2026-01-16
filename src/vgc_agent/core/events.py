@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import AsyncIterator, Callable
 from datetime import datetime
 from typing import Any
 
 from vgc_agent.core.types import Event, EventType, Phase
+
+logger = logging.getLogger(__name__)
 
 
 class EventEmitter:
@@ -62,7 +65,8 @@ class EventEmitter:
             try:
                 listener(event)
             except Exception:
-                pass
+                listener_name = getattr(listener, "__name__", repr(listener))
+                logger.exception("Event listener %s failed for event %s", listener_name, event_type)
         if self._queue is not None:
             try:
                 self._queue.put_nowait(event)
@@ -81,7 +85,10 @@ class EventEmitter:
             try:
                 await listener(event)
             except Exception:
-                pass
+                listener_name = getattr(listener, "__name__", repr(listener))
+                logger.exception(
+                    "Async event listener %s failed for event %s", listener_name, event_type
+                )
         return event
 
     def session_started(self, session_id: str, requirements: str) -> Event:
@@ -152,3 +159,45 @@ class EventEmitter:
 
     def weakness_found(self, weakness: str, severity: str) -> Event:
         return self.emit(EventType.WEAKNESS_FOUND, {"weakness": weakness, "severity": severity})
+
+    def token_usage(
+        self,
+        input_tokens: int,
+        output_tokens: int,
+        total_input: int,
+        total_output: int,
+        cost_usd: float,
+        budget: float | None = None,
+    ) -> Event:
+        data: dict[str, Any] = {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_input": total_input,
+            "total_output": total_output,
+            "cost_usd": cost_usd,
+        }
+        if budget is not None:
+            data["budget"] = budget
+            data["budget_percent"] = (cost_usd / budget) * 100 if budget > 0 else 0
+        return self.emit(EventType.TOKEN_USAGE, data)
+
+    def human_input_requested(
+        self,
+        team_summary: list[str],
+        weaknesses: list[dict],
+        iteration: int,
+    ) -> Event:
+        return self.emit(
+            EventType.HUMAN_INPUT_REQUESTED,
+            {
+                "team_summary": team_summary,
+                "weaknesses": weaknesses,
+                "iteration": iteration,
+            },
+        )
+
+    def human_input_received(self, action: str, guidance: str | None = None) -> Event:
+        return self.emit(
+            EventType.HUMAN_INPUT_RECEIVED,
+            {"action": action, "guidance": guidance},
+        )
