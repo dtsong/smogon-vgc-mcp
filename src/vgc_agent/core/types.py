@@ -36,6 +36,9 @@ class EventType(str, Enum):
     ITERATION_COMPLETED = "iteration_completed"
     TEAM_UPDATED = "team_updated"
     WEAKNESS_FOUND = "weakness_found"
+    TOKEN_USAGE = "token_usage"
+    HUMAN_INPUT_REQUESTED = "human_input_requested"
+    HUMAN_INPUT_RECEIVED = "human_input_received"
 
 
 @dataclass
@@ -54,6 +57,60 @@ class Event:
             "phase": self.phase.value,
             "data": self.data,
         }
+
+
+OPUS_INPUT_COST_PER_M = 15.0
+OPUS_OUTPUT_COST_PER_M = 75.0
+
+
+@dataclass
+class TokenUsage:
+    """Tracks token usage and estimated cost."""
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+    @property
+    def total_tokens(self) -> int:
+        return self.input_tokens + self.output_tokens
+
+    @property
+    def cost_usd(self) -> float:
+        input_cost = (self.input_tokens / 1_000_000) * OPUS_INPUT_COST_PER_M
+        output_cost = (self.output_tokens / 1_000_000) * OPUS_OUTPUT_COST_PER_M
+        return input_cost + output_cost
+
+    def add(self, input_tokens: int, output_tokens: int) -> None:
+        self.input_tokens += input_tokens
+        self.output_tokens += output_tokens
+
+    def to_dict(self) -> dict:
+        return {
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "total_tokens": self.total_tokens,
+            "cost_usd": round(self.cost_usd, 4),
+        }
+
+
+@dataclass
+class HumanFeedback:
+    """Human feedback during interactive mode."""
+
+    action: str
+    guidance: str | None = None
+
+    def to_dict(self) -> dict:
+        return {"action": self.action, "guidance": self.guidance}
+
+
+class BudgetExceededError(Exception):
+    """Raised when the token budget is exceeded."""
+
+    def __init__(self, budget: float, spent: float):
+        self.budget = budget
+        self.spent = spent
+        super().__init__(f"Budget exceeded: ${spent:.2f} spent of ${budget:.2f} budget")
 
 
 @dataclass
@@ -228,6 +285,9 @@ class SessionState:
     started_at: datetime | None = None
     completed_at: datetime | None = None
     error: str | None = None
+    token_usage: TokenUsage = field(default_factory=TokenUsage)
+    budget: float | None = None
+    human_guidance: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -243,4 +303,6 @@ class SessionState:
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
             "error": self.error,
+            "token_usage": self.token_usage.to_dict(),
+            "budget": self.budget,
         }

@@ -7,15 +7,22 @@ from anthropic import Anthropic
 from vgc_agent.agents.base import AgentConfig, BaseAgent
 from vgc_agent.core.events import EventEmitter
 from vgc_agent.core.mcp import MCPConnection
-from vgc_agent.core.types import MatchupAnalysis, SessionState, TeamDesign
+from vgc_agent.core.types import MatchupAnalysis, SessionState, TeamDesign, TokenUsage
 
 CALCULATOR_SYSTEM_PROMPT = """You are the Calculator, a VGC damage calculation expert.
 
-Your job is to:
-1. Run damage calculations for each team member against top meta threats
-2. Identify guaranteed KOs and near-misses
-3. Calculate incoming damage to see what the team survives
-4. Suggest EV benchmarks
+CRITICAL RULES:
+1. Call get_top_pokemon first to identify the REAL meta threats
+2. Only calculate against Pokemon from usage data, not general knowledge
+3. Use analyze_matchup for head-to-head comparisons
+4. Use get_speed_benchmarks to verify speed tiers
+
+Your workflow:
+1. get_top_pokemon(limit=20) to see what Pokemon are actually common
+2. For each team member, analyze_matchup against top threats
+3. Identify OHKOs, 2HKOs, and survival benchmarks
+4. Use get_speed_benchmarks to check speed tiers
+5. Recommend EV investments based on calc results
 
 Output as JSON:
 {
@@ -31,6 +38,8 @@ CALCULATOR_TOOLS = [
     "analyze_matchup",
     "get_pokemon",
     "get_top_pokemon",
+    "get_speed_benchmarks",
+    "analyze_team_type_coverage",
 ]
 
 
@@ -40,6 +49,8 @@ class CalculatorAgent(BaseAgent):
         mcp: MCPConnection,
         events: EventEmitter,
         anthropic: Anthropic | None = None,
+        token_usage: TokenUsage | None = None,
+        budget: float | None = None,
     ):
         config = AgentConfig(
             name="Calculator",
@@ -47,7 +58,7 @@ class CalculatorAgent(BaseAgent):
             tools=CALCULATOR_TOOLS,
             max_tool_calls=30,
         )
-        super().__init__(config, mcp, events, anthropic)
+        super().__init__(config, mcp, events, anthropic, token_usage, budget)
 
     async def execute(self, state: SessionState) -> MatchupAnalysis:
         if not state.team_design:

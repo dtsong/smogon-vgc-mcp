@@ -9,17 +9,24 @@ from anthropic import Anthropic
 from vgc_agent.agents.base import AgentConfig, BaseAgent
 from vgc_agent.core.events import EventEmitter
 from vgc_agent.core.mcp import MCPConnection
-from vgc_agent.core.types import SessionState, TeamDesign
+from vgc_agent.core.types import SessionState, TeamDesign, TokenUsage
 
 REFINER_SYSTEM_PROMPT = """You are the Refiner, optimizing Pokemon sets and EV spreads.
 
-Your job is to:
-1. Create EV spreads that hit specific benchmarks
-2. Select optimal moves
-3. Fine-tune items and abilities
-4. Ensure correct speed tiers
+CRITICAL RULES:
+1. Call get_pokemon_tournament_spreads for each Pokemon to see real tournament builds
+2. Call get_pokemon for ladder spread data as backup
+3. Prioritize tournament spreads - these are proven competitive builds
+4. Use calculate_damage to verify benchmarks are met
+5. Use suggest_ev_spread only when you need custom optimization
 
-Output the final team in Pokemon Showdown format with benchmark comments:
+Your workflow for each Pokemon:
+1. get_pokemon_tournament_spreads(pokemon) - see what top players use
+2. get_pokemon(pokemon) - see ladder spreads for comparison
+3. Pick the most common spread OR use suggest_ev_spread for custom needs
+4. Verify key benchmarks with calculate_damage
+
+Output the final team in Pokemon Showdown format:
 
 # Benchmarks: Survives X from Y, OHKOs Z
 Pokemon @ Item
@@ -39,6 +46,7 @@ REFINER_TOOLS = [
     "calculate_damage",
     "suggest_ev_spread",
     "get_pokemon",
+    "get_pokemon_tournament_spreads",
 ]
 
 
@@ -48,6 +56,8 @@ class RefinerAgent(BaseAgent):
         mcp: MCPConnection,
         events: EventEmitter,
         anthropic: Anthropic | None = None,
+        token_usage: TokenUsage | None = None,
+        budget: float | None = None,
     ):
         config = AgentConfig(
             name="Refiner",
@@ -55,7 +65,7 @@ class RefinerAgent(BaseAgent):
             tools=REFINER_TOOLS,
             max_tool_calls=40,
         )
-        super().__init__(config, mcp, events, anthropic)
+        super().__init__(config, mcp, events, anthropic, token_usage, budget)
 
     async def execute(self, state: SessionState) -> str:
         if not state.team_design:

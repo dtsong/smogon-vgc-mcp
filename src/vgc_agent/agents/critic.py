@@ -11,17 +11,25 @@ from vgc_agent.core.types import (
     MatchupAnalysis,
     SessionState,
     TeamDesign,
+    TokenUsage,
     Weakness,
     WeaknessReport,
 )
 
-CRITIC_SYSTEM_PROMPT = """You are the Critic, a VGC expert responsible for stress-testing teams.
+CRITIC_SYSTEM_PROMPT = """You are the Critic, a VGC expert who stress-tests teams.
 
-Your job is to:
-1. Identify Pokemon/strategies that threaten multiple team members
-2. Find problematic lead matchups
-3. Look for common strategies the team struggles against
-4. Check for over-reliance on specific conditions
+CRITICAL RULES:
+1. Call get_top_pokemon to identify REAL meta threats from usage data
+2. Only consider threats that actually appear in the meta, not theoretical ones
+3. Use get_pokemon_counters to find what beats each team member
+4. Use calculate_damage to verify threat severity
+
+Your workflow:
+1. get_top_pokemon(limit=30) to see what's actually popular
+2. For each top threat, check if the team has an answer
+3. get_pokemon_counters for each team member to find their weaknesses
+4. calculate_damage to verify damage calcs for severe threats
+5. find_teams_with_pokemon_core to see how successful teams handle similar cores
 
 Severity ratings: minor, moderate, severe, critical
 
@@ -52,6 +60,8 @@ class CriticAgent(BaseAgent):
         mcp: MCPConnection,
         events: EventEmitter,
         anthropic: Anthropic | None = None,
+        token_usage: TokenUsage | None = None,
+        budget: float | None = None,
     ):
         config = AgentConfig(
             name="Critic",
@@ -59,7 +69,7 @@ class CriticAgent(BaseAgent):
             tools=CRITIC_TOOLS,
             max_tool_calls=25,
         )
-        super().__init__(config, mcp, events, anthropic)
+        super().__init__(config, mcp, events, anthropic, token_usage, budget)
 
     async def execute(self, state: SessionState) -> WeaknessReport:
         if not state.team_design:

@@ -11,6 +11,7 @@ from anthropic import Anthropic
 
 from vgc_agent.core.events import EventEmitter
 from vgc_agent.core.mcp import MCPConnection
+from vgc_agent.core.types import TokenUsage
 
 
 @dataclass
@@ -34,11 +35,15 @@ class BaseAgent(ABC):
         mcp: MCPConnection,
         events: EventEmitter,
         anthropic: Anthropic | None = None,
+        token_usage: TokenUsage | None = None,
+        budget: float | None = None,
     ):
         self.config = config
         self.mcp = mcp
         self.events = events
         self.anthropic = anthropic or Anthropic()
+        self.token_usage = token_usage or TokenUsage()
+        self.budget = budget
 
     @property
     def name(self) -> str:
@@ -74,6 +79,18 @@ class BaseAgent(ABC):
                 tools=tools,
                 messages=messages,
             )
+            if response.usage:
+                input_tokens = response.usage.input_tokens
+                output_tokens = response.usage.output_tokens
+                self.token_usage.add(input_tokens, output_tokens)
+                self.events.token_usage(
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    total_input=self.token_usage.input_tokens,
+                    total_output=self.token_usage.output_tokens,
+                    cost_usd=self.token_usage.cost_usd,
+                    budget=self.budget,
+                )
             if response.stop_reason == "tool_use":
                 tool_results = []
                 for block in response.content:
