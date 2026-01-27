@@ -1,16 +1,28 @@
 """Tests for Pokemon Showdown replay parser."""
 
 from smogon_vgc_mcp.parser.replay import (
+    Bo3Info,
+    BoostEvent,
     DamageEvent,
     FaintEvent,
+    FieldEvent,
+    HealEvent,
     MoveEvent,
     Player,
     Pokemon,
     Replay,
+    StatSpread,
+    StatusEvent,
     Team,
     TeraEvent,
     Turn,
+    WeatherEvent,
+    extract_log_from_html,
+    extract_replay_id,
+    extract_replay_id_from_html,
+    normalize_replay_url,
     parse_replay,
+    parse_showteam,
 )
 
 
@@ -413,3 +425,433 @@ class TestParseReplay:
         mon = replay.player1.team.pokemon[0]
         assert "Fake Out" in mon.moves
         assert "Flare Blitz" in mon.moves
+
+
+class TestStatSpread:
+    def test_defaults(self):
+        spread = StatSpread()
+        assert spread.hp == 0
+        assert spread.spe == 0
+
+    def test_as_dict(self):
+        spread = StatSpread(hp=252, def_=4, spd=252)
+        d = spread.as_dict()
+        assert d["hp"] == 252
+        assert d["def_"] == 4
+        assert d["atk"] == 0
+
+
+class TestShowteamParsing:
+    def test_parse_full_pokemon(self):
+        packed = "Incineroar||Sitrus Berry|Intimidate|Fake Out,Flare Blitz,Parting Shot,Knock Off|Careful|252,0,4,0,252,0|M|31,31,31,31,31,31||50|,,,,,Dark"
+        pokemon = parse_showteam(packed)
+        assert len(pokemon) == 1
+        mon = pokemon[0]
+        assert mon.species == "Incineroar"
+        assert mon.item == "Sitrus Berry"
+        assert mon.ability == "Intimidate"
+        assert mon.nature == "Careful"
+        assert mon.moves == ["Fake Out", "Flare Blitz", "Parting Shot", "Knock Off"]
+        assert mon.evs is not None
+        assert mon.evs.hp == 252
+        assert mon.evs.def_ == 4
+        assert mon.evs.spd == 252
+        assert mon.evs.atk == 0
+        assert mon.ivs is not None
+        assert mon.ivs.hp == 31
+        assert mon.gender == "M"
+        assert mon.level == 50
+        assert mon.tera_type == "Dark"
+
+    def test_parse_minimal_pokemon(self):
+        packed = "Raging Bolt||Leftovers|Protosynthesis|Protect,CalmMind,DragonPulse,Thunderclap||||||50|,,,,,Fairy"
+        pokemon = parse_showteam(packed)
+        assert len(pokemon) == 1
+        mon = pokemon[0]
+        assert mon.species == "Raging Bolt"
+        assert mon.item == "Leftovers"
+        assert mon.ability == "Protosynthesis"
+        assert mon.nature is None
+        assert mon.evs is None
+        assert mon.tera_type == "Fairy"
+        assert mon.level == 50
+
+    def test_parse_nicknamed_pokemon(self):
+        packed = "Rocky|Incineroar|Sitrus Berry|Intimidate|Fake Out|||M|||50|,,,,,Dark"
+        pokemon = parse_showteam(packed)
+        assert len(pokemon) == 1
+        mon = pokemon[0]
+        assert mon.species == "Incineroar"
+        assert mon.nickname == "Rocky"
+
+    def test_parse_multiple_pokemon(self):
+        packed = "Incineroar||Sitrus Berry|Intimidate|Fake Out||||||50|,,,,,Dark]Flutter Mane||Booster Energy|Protosynthesis|Moonblast||||||50|,,,,,Fairy"
+        pokemon = parse_showteam(packed)
+        assert len(pokemon) == 2
+        assert pokemon[0].species == "Incineroar"
+        assert pokemon[1].species == "Flutter Mane"
+
+    def test_parse_shiny_pokemon(self):
+        packed = "Incineroar||Sitrus Berry|Intimidate|Fake Out|||||S|50|"
+        pokemon = parse_showteam(packed)
+        assert len(pokemon) == 1
+        assert pokemon[0].shiny is True
+
+    def test_empty_showteam(self):
+        assert parse_showteam("") == []
+        assert parse_showteam("  ") == []
+
+
+class TestShowteamIntegration:
+    def test_showteam_merged_into_team(self):
+        log = """|player|p1|Player1|avatar
+|player|p2|Player2|avatar
+|poke|p1|Incineroar, L50, M
+|poke|p1|Flutter Mane, L50
+|showteam|p1|Incineroar||Sitrus Berry|Intimidate|Fake Out,Flare Blitz,Parting Shot,Knock Off|Careful|252,0,4,0,252,0|M|31,31,31,31,31,31||50|,,,,,Dark]Flutter Mane||Booster Energy|Protosynthesis|Moonblast,Shadow Ball,Dazzling Gleam,Protect|Timid|4,0,0,252,0,252||31,31,31,31,31,31||50|,,,,,Fairy
+"""
+        replay = parse_replay(log, "test")
+        incin = replay.player1.team.get_pokemon("Incineroar")
+        assert incin is not None
+        assert incin.item == "Sitrus Berry"
+        assert incin.ability == "Intimidate"
+        assert incin.nature == "Careful"
+        assert incin.evs is not None
+        assert incin.evs.hp == 252
+        assert incin.tera_type == "Dark"
+        assert incin.moves == ["Fake Out", "Flare Blitz", "Parting Shot", "Knock Off"]
+
+        flutter = replay.player1.team.get_pokemon("Flutter Mane")
+        assert flutter is not None
+        assert flutter.ability == "Protosynthesis"
+        assert flutter.tera_type == "Fairy"
+
+
+class TestHealEvent:
+    def test_parse_heal(self):
+        log = """|player|p1|Player1|avatar
+|poke|p1|Incineroar, L50
+|switch|p1a: Incineroar|Incineroar, L50|50/100
+|turn|1
+|-heal|p1a: Incineroar|62/100|[from] item: Sitrus Berry
+"""
+        replay = parse_replay(log, "test")
+        heal_events = [e for e in replay.turns[0].events if isinstance(e, HealEvent)]
+        assert len(heal_events) == 1
+        assert heal_events[0].species == "Incineroar"
+        assert heal_events[0].hp_remaining == 62
+        assert heal_events[0].source == "[from] item: Sitrus Berry"
+
+
+class TestBoostEvents:
+    def test_parse_boost(self):
+        log = """|player|p1|Player1|avatar
+|poke|p1|Flutter Mane, L50
+|switch|p1a: Flutter Mane|Flutter Mane, L50|100/100
+|turn|1
+|-boost|p1a: Flutter Mane|spa|1
+"""
+        replay = parse_replay(log, "test")
+        boost_events = replay.turns[0].boosts
+        assert len(boost_events) == 1
+        assert boost_events[0].stat == "spa"
+        assert boost_events[0].stages == 1
+
+    def test_parse_unboost(self):
+        log = """|player|p1|Player1|avatar
+|player|p2|Player2|avatar
+|poke|p1|Incineroar, L50
+|poke|p2|Flutter Mane, L50
+|switch|p1a: Incineroar|Incineroar, L50|100/100
+|switch|p2a: Flutter Mane|Flutter Mane, L50|100/100
+|turn|1
+|-ability|p1a: Incineroar|Intimidate|boost
+|-unboost|p2a: Flutter Mane|atk|1
+"""
+        replay = parse_replay(log, "test")
+        boost_events = replay.turns[0].boosts
+        assert len(boost_events) == 1
+        assert boost_events[0].stat == "atk"
+        assert boost_events[0].stages == -1
+
+    def test_boost_tracking_in_state(self):
+        log = """|player|p1|Player1|avatar
+|poke|p1|Flutter Mane, L50
+|switch|p1a: Flutter Mane|Flutter Mane, L50|100/100
+|turn|1
+|-boost|p1a: Flutter Mane|spa|1
+|turn|2
+|-boost|p1a: Flutter Mane|spa|1
+"""
+        replay = parse_replay(log, "test")
+        state = replay.battle_state.active.get("p1a: Flutter Mane")
+        assert state is not None
+        assert state.boosts.get("spa") == 2
+
+
+class TestStatusEvents:
+    def test_parse_status(self):
+        log = """|player|p1|Player1|avatar
+|poke|p2|Incineroar, L50
+|switch|p2a: Incineroar|Incineroar, L50|100/100
+|turn|1
+|-status|p2a: Incineroar|brn
+"""
+        replay = parse_replay(log, "test")
+        status_events = replay.turns[0].statuses
+        assert len(status_events) == 1
+        assert status_events[0].status == "brn"
+        assert status_events[0].cured is False
+
+    def test_parse_cure_status(self):
+        log = """|player|p1|Player1|avatar
+|poke|p2|Incineroar, L50
+|switch|p2a: Incineroar|Incineroar, L50|100/100
+|turn|1
+|-status|p2a: Incineroar|brn
+|turn|2
+|-curestatus|p2a: Incineroar|brn
+"""
+        replay = parse_replay(log, "test")
+        status_events = replay.turns[1].statuses
+        assert len(status_events) == 1
+        assert status_events[0].cured is True
+
+
+class TestWeatherEvents:
+    def test_parse_weather(self):
+        log = """|player|p1|Player1|avatar
+|turn|1
+|-weather|SunnyDay|[from] ability: Drought|[of] p1a: Torkoal
+"""
+        replay = parse_replay(log, "test")
+        weather_events = [e for e in replay.turns[0].events if isinstance(e, WeatherEvent)]
+        assert len(weather_events) == 1
+        assert weather_events[0].weather == "SunnyDay"
+        assert replay.battle_state.field.weather == "SunnyDay"
+
+    def test_weather_none(self):
+        log = """|player|p1|Player1|avatar
+|turn|1
+|-weather|SunnyDay
+|turn|2
+|-weather|none
+"""
+        replay = parse_replay(log, "test")
+        assert replay.battle_state.field.weather is None
+
+
+class TestFieldEvents:
+    def test_parse_trick_room(self):
+        log = """|player|p1|Player1|avatar
+|turn|1
+|-fieldstart|move: Trick Room
+"""
+        replay = parse_replay(log, "test")
+        field_events = [e for e in replay.turns[0].events if isinstance(e, FieldEvent)]
+        assert len(field_events) == 1
+        assert field_events[0].started is True
+        assert "Trick Room" in field_events[0].effect
+        assert replay.battle_state.field.trick_room is True
+
+    def test_trick_room_end(self):
+        log = """|player|p1|Player1|avatar
+|turn|1
+|-fieldstart|move: Trick Room
+|turn|5
+|-fieldend|move: Trick Room
+"""
+        replay = parse_replay(log, "test")
+        assert replay.battle_state.field.trick_room is False
+
+    def test_parse_terrain(self):
+        log = """|player|p1|Player1|avatar
+|turn|1
+|-fieldstart|move: Grassy Terrain|[from] ability: Grassy Surge|[of] p1a: Rillaboom
+"""
+        replay = parse_replay(log, "test")
+        assert replay.battle_state.field.terrain == "Grassy Terrain"
+
+
+class TestBattleState:
+    def test_hp_tracking(self):
+        log = """|player|p1|Player1|avatar
+|player|p2|Player2|avatar
+|poke|p1|Incineroar, L50
+|poke|p2|Flutter Mane, L50
+|switch|p1a: Incineroar|Incineroar, L50|100/100
+|switch|p2a: Flutter Mane|Flutter Mane, L50|100/100
+|turn|1
+|move|p1a: Incineroar|Fake Out|p2a: Flutter Mane
+|-damage|p2a: Flutter Mane|85/100
+"""
+        replay = parse_replay(log, "test")
+        state = replay.battle_state.active["p2a: Flutter Mane"]
+        assert state.hp_current == 85
+        assert state.hp_max == 100
+
+    def test_faint_sets_hp_zero(self):
+        log = """|player|p1|Player1|avatar
+|player|p2|Player2|avatar
+|poke|p2|Flutter Mane, L50
+|switch|p2a: Flutter Mane|Flutter Mane, L50|100/100
+|turn|1
+|faint|p2a: Flutter Mane
+"""
+        replay = parse_replay(log, "test")
+        state = replay.battle_state.active["p2a: Flutter Mane"]
+        assert state.hp_current == 0
+
+
+class TestReplayMetadata:
+    def test_generation(self):
+        log = """|gen|9
+|tier|[Gen 9] VGC 2026 Reg F
+"""
+        replay = parse_replay(log)
+        assert replay.generation == 9
+
+    def test_rated(self):
+        log = """|rated|
+"""
+        replay = parse_replay(log)
+        assert replay.is_rated is True
+
+    def test_rules(self):
+        log = """|rule|Species Clause: Limit one of each Pokémon
+|rule|Item Clause: Limit one of each item
+"""
+        replay = parse_replay(log)
+        assert len(replay.rules) == 2
+        assert "Species Clause" in replay.rules[0]
+
+
+class TestBo3Detection:
+    def test_detect_bo3(self):
+        log = """|player|p1|Player1|avatar
+|player|p2|Player2|avatar
+|uhtml|bestof|<h2><strong>Game 1</strong> of <a href="/game-bestof3-gen9vgc2026regfbo3-123456">a best-of-3</a></h2>
+|turn|1
+"""
+        replay = parse_replay(log, "test")
+        assert replay.bo3 is not None
+        assert replay.bo3.game_number == 1
+        assert replay.bo3.series_id == "gen9vgc2026regfbo3-123456"
+
+    def test_detect_bo3_game2(self):
+        log = """|uhtml|bestof|<h2><strong>Game 2</strong> of <a href="/game-bestof3-gen9vgc2026regfbo3-789">a best-of-3</a></h2>
+"""
+        replay = parse_replay(log)
+        assert replay.bo3 is not None
+        assert replay.bo3.game_number == 2
+
+    def test_no_bo3(self):
+        log = """|player|p1|Player1|avatar
+|turn|1
+"""
+        replay = parse_replay(log)
+        assert replay.bo3 is None
+
+    def test_linked_games(self):
+        log = """|uhtml|bestof|<h2><strong>Game 1</strong> of <a href="/game-bestof3-gen9vgc2026regfbo3-123">a best-of-3</a></h2>
+|tempnotify|choice|Next game|/gen9vgc2026regfbo3-456
+"""
+        replay = parse_replay(log)
+        assert replay.bo3 is not None
+        assert "/gen9vgc2026regfbo3-456" in replay.bo3.linked_games
+
+
+class TestHTMLExtraction:
+    def test_extract_log_from_html(self):
+        html = """<!DOCTYPE html>
+<html>
+<head><title>Test Replay</title></head>
+<body>
+<script type="text/plain" class="battle-log-data">
+|player|p1|TestPlayer|avatar
+|gen|9
+|turn|1
+</script>
+</body>
+</html>"""
+        log = extract_log_from_html(html)
+        assert log is not None
+        assert "|player|p1|TestPlayer|avatar" in log
+        assert "|gen|9" in log
+
+    def test_extract_log_none_when_missing(self):
+        html = "<html><body>No log here</body></html>"
+        assert extract_log_from_html(html) is None
+
+    def test_extract_replay_id_from_html(self):
+        html = '<input type="hidden" name="replayid" value="gen9vgc2026regf-123456">'
+        rid = extract_replay_id_from_html(html)
+        assert rid == "gen9vgc2026regf-123456"
+
+    def test_extract_replay_id_missing(self):
+        assert extract_replay_id_from_html("<html></html>") is None
+
+
+class TestURLNormalization:
+    def test_strip_html_extension(self):
+        assert normalize_replay_url("https://replay.pokemonshowdown.com/gen9vgc-123.html") == \
+            "https://replay.pokemonshowdown.com/gen9vgc-123"
+
+    def test_strip_json_extension(self):
+        assert normalize_replay_url("https://replay.pokemonshowdown.com/gen9vgc-123.json") == \
+            "https://replay.pokemonshowdown.com/gen9vgc-123"
+
+    def test_strip_log_extension(self):
+        assert normalize_replay_url("https://replay.pokemonshowdown.com/gen9vgc-123.log") == \
+            "https://replay.pokemonshowdown.com/gen9vgc-123"
+
+    def test_strip_player_suffix(self):
+        assert normalize_replay_url("https://replay.pokemonshowdown.com/gen9vgc-123?p2") == \
+            "https://replay.pokemonshowdown.com/gen9vgc-123"
+
+    def test_bare_url_unchanged(self):
+        url = "https://replay.pokemonshowdown.com/gen9vgc-123"
+        assert normalize_replay_url(url) == url
+
+    def test_extract_replay_id(self):
+        assert extract_replay_id("https://replay.pokemonshowdown.com/gen9vgc2026regf-123456") == \
+            "gen9vgc2026regf-123456"
+
+    def test_extract_replay_id_with_extension(self):
+        assert extract_replay_id("https://replay.pokemonshowdown.com/gen9vgc-123.html") == \
+            "gen9vgc-123"
+
+    def test_extract_replay_id_with_player_suffix(self):
+        assert extract_replay_id("https://replay.pokemonshowdown.com/gen9vgc-123?p1") == \
+            "gen9vgc-123"
+
+
+class TestFailEvent:
+    def test_fail_marks_move_missed(self):
+        log = """|player|p1|Player1|avatar
+|poke|p1|Incineroar, L50
+|switch|p1a: Incineroar|Incineroar, L50|100/100
+|turn|1
+|move|p1a: Incineroar|Fake Out|p2a: Target
+|-fail|p2a: Target
+"""
+        replay = parse_replay(log, "test")
+        move = replay.turns[0].moves[0]
+        assert move.missed is True
+
+
+class TestSwitchResetsBoosts:
+    def test_switch_clears_boosts(self):
+        log = """|player|p1|Player1|avatar
+|poke|p1|Flutter Mane, L50
+|poke|p1|Incineroar, L50
+|switch|p1a: Flutter Mane|Flutter Mane, L50|100/100
+|turn|1
+|-boost|p1a: Flutter Mane|spa|2
+|turn|2
+|switch|p1a: Incineroar|Incineroar, L50|100/100
+"""
+        replay = parse_replay(log, "test")
+        state = replay.battle_state.active.get("p1a: Incineroar")
+        assert state is not None
+        assert state.boosts == {}
