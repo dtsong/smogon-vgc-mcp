@@ -10,6 +10,7 @@ from smogon_vgc_mcp.fetcher import (
     fetch_and_store_pokepaste_teams,
 )
 from smogon_vgc_mcp.formats import DEFAULT_FORMAT, FORMATS, get_format
+from smogon_vgc_mcp.health import run_health_check
 from smogon_vgc_mcp.resilience import get_all_circuit_states
 from smogon_vgc_mcp.utils import (
     ValidationError,
@@ -394,29 +395,23 @@ def register_admin_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def get_service_health() -> dict:
-        """Get health status of external services including circuit breaker states.
+        """Get comprehensive health status of the server and external services.
 
-        Use this to check if external services (Smogon, Pokemon Showdown, Google Sheets,
-        Pokepaste) are available or experiencing issues. Shows circuit breaker states
-        that protect against cascading failures.
+        Checks database connectivity, node/calc engine, tool registration,
+        circuit breaker states, and data availability. Use this to diagnose
+        issues or verify the server is operating correctly.
 
-        Returns: services{service_name: {state, failure_count, last_failure, recovery_at}},
-        state_descriptions{}.
+        Returns: healthy (bool), checks{database, node_calc, tool_registration,
+        circuit_breakers, data_availability}.
 
-        States:
+        Circuit breaker states:
         - closed: Service operating normally
         - open: Service unavailable, requests being rejected until recovery_at
         - half_open: Testing if service has recovered
 
         Examples:
+        - "Is the server healthy?"
         - "Are external services healthy?"
         - "Why are my refresh requests failing?"
         """
-        return {
-            "services": get_all_circuit_states(),
-            "state_descriptions": {
-                "closed": "Service operating normally",
-                "open": "Service unavailable, requests being rejected",
-                "half_open": "Testing if service has recovered",
-            },
-        }
+        return await run_health_check()
