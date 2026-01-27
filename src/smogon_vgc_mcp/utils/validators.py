@@ -528,6 +528,30 @@ def validate_month(month: str) -> str:
     return month
 
 
+def validate_showdown_username(username: str) -> str:
+    """Validate a Pokemon Showdown username.
+
+    Args:
+        username: Showdown username
+
+    Returns:
+        Stripped username
+
+    Raises:
+        ValidationError: If username is empty or too long
+    """
+    if not username or not username.strip():
+        raise ValidationError("Showdown username cannot be empty")
+
+    username = username.strip()
+    if len(username) > 18:
+        raise ValidationError(
+            f"Showdown username too long ({len(username)} chars)",
+            hint="Showdown usernames are at most 18 characters",
+        )
+    return username
+
+
 def validate_replay_url(url: str) -> str:
     """Validate Pokemon Showdown replay URL.
 

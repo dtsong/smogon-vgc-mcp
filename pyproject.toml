@@ -16,6 +16,9 @@ dependencies = [
     "anthropic>=0.40.0",
 ]
 
+[project.optional-dependencies]
+browser = ["playwright>=1.40.0"]
+
 [project.scripts]
 smogon-vgc-mcp = "smogon_vgc_mcp.entry.stdio:main"
 vgc-build = "vgc_agent.cli:main"

@@ -3,7 +3,7 @@
 from typing import Any
 
 SENSITIVE_KEYS: frozenset[str] = frozenset(
-    {"password", "token", "api_key", "secret", "auth", "credential", "key"}
+    {"password", "token", "api_key", "secret", "auth", "credential", "key", "sid", "cookie"}
 )
 
 

@@ -2,8 +2,15 @@
 
 from mcp.server.fastmcp import FastMCP
 
+from smogon_vgc_mcp.fetcher.replay_list import ReplayListError, fetch_public_replay_list
 from smogon_vgc_mcp.parser.replay import fetch_and_parse_replay
-from smogon_vgc_mcp.utils import ValidationError, make_error_response, validate_replay_url
+from smogon_vgc_mcp.utils import (
+    ValidationError,
+    make_error_response,
+    validate_limit,
+    validate_replay_url,
+)
+from smogon_vgc_mcp.utils.validators import validate_showdown_username
 
 
 def register_replay_tools(mcp: FastMCP) -> None:
@@ -202,4 +209,145 @@ def register_replay_tools(mcp: FastMCP) -> None:
             return make_error_response(
                 f"Failed to parse replay: {e}",
                 hint="Check that the replay URL is valid and accessible",
+            )
+
+    @mcp.tool()
+    async def fetch_user_public_replays(
+        username: str, format: str = "", max_pages: int = 5
+    ) -> dict:
+        """Fetch a user's public Pokemon Showdown replays.
+
+        Search for replays by username, optionally filtered by format.
+        Each page returns up to 50 replays. Use max_pages to control depth.
+
+        Returns: username, format_filter, replays[]{replay_id, url, format, players,
+        rating, upload_time, is_private}, total_found, pages_fetched, has_more.
+
+        Examples:
+        - "Find all public replays for user Heliosan"
+        - "Get Heliosan's gen9vgc2026regf replays"
+
+        Args:
+            username: Pokemon Showdown username.
+            format: Optional format filter (e.g., "gen9vgc2026regf").
+            max_pages: Maximum pages to fetch (1-20, default 5).
+        """
+        try:
+            username = validate_showdown_username(username)
+            max_pages = validate_limit(max_pages, max_limit=20)
+
+            result = await fetch_public_replay_list(
+                username=username,
+                format=format,
+                max_pages=max_pages,
+            )
+
+            return {
+                "username": username,
+                "format_filter": format or None,
+                "replays": [
+                    {
+                        "replay_id": r.replay_id,
+                        "url": r.url,
+                        "format": r.format,
+                        "players": r.players,
+                        "rating": r.rating,
+                        "upload_time": r.upload_time,
+                        "is_private": r.is_private,
+                    }
+                    for r in result.replays
+                ],
+                "total_found": result.total_fetched,
+                "pages_fetched": result.pages_fetched,
+                "has_more": result.has_more,
+            }
+
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+        except ReplayListError as e:
+            return make_error_response(f"Showdown API error: {e}")
+        except Exception as e:
+            return make_error_response(
+                f"Failed to fetch replays: {e}",
+                hint="Check that the username is correct",
+            )
+
+    @mcp.tool()
+    async def fetch_private_replays(
+        username: str, password: str, format: str = "", max_pages: int = 5
+    ) -> dict:
+        """Fetch a user's private Pokemon Showdown replays.
+
+        Requires Showdown login credentials. Credentials are used transiently
+        for authentication and never stored or logged. Requires the playwright
+        optional dependency.
+
+        Returns: username, format_filter, replays[]{replay_id, url, format, players,
+        rating, upload_time, is_private}, total_found, pages_fetched, has_more.
+
+        Examples:
+        - "Fetch my private replays (username: X, password: Y)"
+        - "Get my private gen9vgc2026regf replays"
+
+        Args:
+            username: Pokemon Showdown username.
+            password: Pokemon Showdown password (used transiently, never stored).
+            format: Optional format filter (e.g., "gen9vgc2026regf").
+            max_pages: Maximum pages to fetch (1-20, default 5).
+        """
+        try:
+            from smogon_vgc_mcp.fetcher.replay_list import fetch_private_replay_list
+            from smogon_vgc_mcp.fetcher.showdown_auth import (
+                AuthenticationError,
+                authenticate_showdown,
+            )
+
+            username = validate_showdown_username(username)
+            max_pages = validate_limit(max_pages, max_limit=20)
+
+            session = await authenticate_showdown(username, password)
+
+            result = await fetch_private_replay_list(
+                username=session.username,
+                sid_cookie=session.sid_cookie,
+                format=format,
+                max_pages=max_pages,
+            )
+
+            return {
+                "username": session.username,
+                "format_filter": format or None,
+                "replays": [
+                    {
+                        "replay_id": r.replay_id,
+                        "url": r.url,
+                        "format": r.format,
+                        "players": r.players,
+                        "rating": r.rating,
+                        "upload_time": r.upload_time,
+                        "is_private": r.is_private,
+                    }
+                    for r in result.replays
+                ],
+                "total_found": result.total_fetched,
+                "pages_fetched": result.pages_fetched,
+                "has_more": result.has_more,
+            }
+
+        except ImportError as e:
+            return make_error_response(
+                str(e),
+                hint="Install with: pip install smogon-vgc-mcp[browser]"
+                " && playwright install chromium",
+            )
+        except AuthenticationError as e:
+            return make_error_response(f"Authentication failed: {e}")
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+        except ReplayListError as e:
+            return make_error_response(f"Showdown API error: {e}")
+        except Exception as e:
+            return make_error_response(
+                f"Failed to fetch private replays: {e}",
+                hint="Check credentials and ensure playwright is installed",
             )
