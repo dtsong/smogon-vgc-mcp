@@ -1,7 +1,10 @@
 """Tests for Pokemon Showdown replay parser."""
 
+import pytest
+
 from smogon_vgc_mcp.parser.replay import (
     Bo3Info,
+    Bo3Series,
     BoostEvent,
     DamageEvent,
     FaintEvent,
@@ -17,6 +20,7 @@ from smogon_vgc_mcp.parser.replay import (
     TeraEvent,
     Turn,
     WeatherEvent,
+    build_bo3_series,
     extract_log_from_html,
     extract_replay_id,
     extract_replay_id_from_html,
@@ -855,3 +859,117 @@ class TestSwitchResetsBoosts:
         state = replay.battle_state.active.get("p1a: Incineroar")
         assert state is not None
         assert state.boosts == {}
+
+
+def _make_bo3_game_log(
+    game_number: int,
+    series_id: str,
+    p1_name: str = "Alice",
+    p2_name: str = "Bob",
+    winner: str | None = None,
+    format_name: str = "[Gen 9] VGC 2026 Reg F",
+) -> str:
+    bo3_html = (
+        f"|uhtml|bestof|<h2><strong>Game {game_number}</strong>"
+        f' of <a href="/game-bestof3-{series_id}">a best-of-3</a></h2>'
+    )
+    lines = [
+        f"|player|p1|{p1_name}|avatar|1500",
+        f"|player|p2|{p2_name}|avatar|1500",
+        "|gen|9",
+        f"|tier|{format_name}",
+        bo3_html,
+        "|turn|1",
+    ]
+    if winner:
+        lines.append(f"|win|{winner}")
+    return "\n".join(lines)
+
+
+class TestBo3Series:
+    def test_2_0_sweep(self):
+        g1 = parse_replay(_make_bo3_game_log(1, "s1", winner="Alice"), "r1")
+        g2 = parse_replay(_make_bo3_game_log(2, "s1", winner="Alice"), "r2")
+        series = build_bo3_series([g1, g2])
+        assert series.winner == "Alice"
+        assert series.score == {"p1": 2, "p2": 0}
+
+    def test_2_1_series(self):
+        g1 = parse_replay(_make_bo3_game_log(1, "s1", winner="Alice"), "r1")
+        g2 = parse_replay(_make_bo3_game_log(2, "s1", winner="Bob"), "r2")
+        g3 = parse_replay(_make_bo3_game_log(3, "s1", winner="Alice"), "r3")
+        series = build_bo3_series([g1, g2, g3])
+        assert series.winner == "Alice"
+        assert series.score == {"p1": 2, "p2": 1}
+
+    def test_p2_wins(self):
+        g1 = parse_replay(_make_bo3_game_log(1, "s1", winner="Bob"), "r1")
+        g2 = parse_replay(_make_bo3_game_log(2, "s1", winner="Bob"), "r2")
+        series = build_bo3_series([g1, g2])
+        assert series.winner == "Bob"
+        assert series.score == {"p1": 0, "p2": 2}
+
+    def test_incomplete_series(self):
+        g1 = parse_replay(_make_bo3_game_log(1, "s1", winner="Alice"), "r1")
+        series = build_bo3_series([g1])
+        assert series.winner is None
+        assert series.score == {"p1": 1, "p2": 0}
+
+    def test_tied_incomplete(self):
+        g1 = parse_replay(_make_bo3_game_log(1, "s1", winner="Alice"), "r1")
+        g2 = parse_replay(_make_bo3_game_log(2, "s1", winner="Bob"), "r2")
+        series = build_bo3_series([g1, g2])
+        assert series.winner is None
+        assert series.score == {"p1": 1, "p2": 1}
+
+    def test_empty_list_raises(self):
+        with pytest.raises(ValueError, match="No games provided"):
+            build_bo3_series([])
+
+    def test_too_many_games_raises(self):
+        games = [
+            parse_replay(_make_bo3_game_log(i, "s1", winner="Alice"), f"r{i}")
+            for i in range(1, 5)
+        ]
+        with pytest.raises(ValueError, match="more than 3"):
+            build_bo3_series(games)
+
+    def test_missing_bo3_info_raises(self):
+        log = "|player|p1|Alice|avatar\n|player|p2|Bob|avatar\n|turn|1\n|win|Alice"
+        game = parse_replay(log, "no-bo3")
+        with pytest.raises(ValueError, match="no Bo3 info"):
+            build_bo3_series([game])
+
+    def test_mismatched_series_ids_raises(self):
+        g1 = parse_replay(_make_bo3_game_log(1, "s1", winner="Alice"), "r1")
+        g2 = parse_replay(_make_bo3_game_log(2, "s2", winner="Bob"), "r2")
+        with pytest.raises(ValueError, match="Mismatched series IDs"):
+            build_bo3_series([g1, g2])
+
+    def test_format_from_game1(self):
+        g1 = parse_replay(
+            _make_bo3_game_log(1, "s1", winner="Alice", format_name="[Gen 9] VGC 2026 Reg G"),
+            "r1",
+        )
+        g2 = parse_replay(_make_bo3_game_log(2, "s1", winner="Alice"), "r2")
+        series = build_bo3_series([g1, g2])
+        assert series.format == "[Gen 9] VGC 2026 Reg G"
+
+    def test_players_from_game1(self):
+        g1 = parse_replay(
+            _make_bo3_game_log(1, "s1", p1_name="Wolfe", p2_name="Aaron"), "r1",
+        )
+        g2 = parse_replay(
+            _make_bo3_game_log(2, "s1", p1_name="Wolfe", p2_name="Aaron", winner="Wolfe"), "r2",
+        )
+        series = build_bo3_series([g1, g2])
+        assert series.players == {"p1": "Wolfe", "p2": "Aaron"}
+
+    def test_games_sorted_by_game_number(self):
+        g3 = parse_replay(_make_bo3_game_log(3, "s1", winner="Alice"), "r3")
+        g1 = parse_replay(_make_bo3_game_log(1, "s1", winner="Bob"), "r1")
+        g2 = parse_replay(_make_bo3_game_log(2, "s1", winner="Alice"), "r2")
+        series = build_bo3_series([g3, g1, g2])
+        assert [g.bo3.game_number for g in series.games] == [1, 2, 3]
+        assert series.winner == "Alice"
+        assert series.score == {"p1": 2, "p2": 1}

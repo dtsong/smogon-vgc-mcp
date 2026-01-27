@@ -261,6 +261,18 @@ class Bo3Info:
 
 
 @dataclass
+class Bo3Series:
+    """Aggregated best-of-3 series linking multiple parsed Replay objects."""
+
+    series_id: str
+    format: str
+    players: dict[str, str]
+    games: list["Replay"]
+    score: dict[str, int]
+    winner: str | None
+
+
+@dataclass
 class Replay:
     """A complete Pokemon Showdown replay."""
 
@@ -495,6 +507,58 @@ def _detect_bo3(log: str) -> Bo3Info | None:
         linked.append(m.group(1))
 
     return Bo3Info(game_number=game_number, series_id=series_id, linked_games=linked)
+
+
+def build_bo3_series(games: list[Replay]) -> Bo3Series:
+    """Build a Bo3Series from individually parsed Replay objects.
+
+    Validates that all games belong to the same series, sorts by game number,
+    and determines the winner (first player to reach 2 wins).
+
+    Raises:
+        ValueError: If games list is empty, has >3 games, contains games
+            without bo3 info, or has mismatched series IDs.
+    """
+    if not games:
+        raise ValueError("No games provided")
+    if len(games) > 3:
+        raise ValueError("Bo3 series cannot have more than 3 games")
+
+    for game in games:
+        if game.bo3 is None:
+            raise ValueError(f"Game {game.replay_id!r} has no Bo3 info")
+
+    series_ids = {game.bo3.series_id for game in games}  # type: ignore[union-attr]
+    if len(series_ids) > 1:
+        raise ValueError(f"Mismatched series IDs: {series_ids}")
+
+    sorted_games = sorted(games, key=lambda g: g.bo3.game_number)  # type: ignore[union-attr]
+
+    game1 = sorted_games[0]
+    series_id = game1.bo3.series_id  # type: ignore[union-attr]
+    players = {"p1": game1.player1.name, "p2": game1.player2.name}
+
+    score = {"p1": 0, "p2": 0}
+    for game in sorted_games:
+        if game.winner == players["p1"]:
+            score["p1"] += 1
+        elif game.winner == players["p2"]:
+            score["p2"] += 1
+
+    winner = None
+    if score["p1"] >= 2:
+        winner = players["p1"]
+    elif score["p2"] >= 2:
+        winner = players["p2"]
+
+    return Bo3Series(
+        series_id=series_id,
+        format=game1.format,
+        players=players,
+        games=sorted_games,
+        score=score,
+        winner=winner,
+    )
 
 
 # ---------------------------------------------------------------------------

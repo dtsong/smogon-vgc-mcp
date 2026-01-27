@@ -3,6 +3,7 @@
 from smogon_vgc_mcp.parser.replay import (
     BattleState,
     Bo3Info,
+    Bo3Series,
     BoostEvent,
     DamageEvent,
     EventType,
@@ -21,6 +22,7 @@ from smogon_vgc_mcp.parser.replay import (
     TeraEvent,
     Turn,
     WeatherEvent,
+    build_bo3_series,
     extract_log_from_html,
     extract_replay_id,
     extract_replay_id_from_html,
@@ -33,6 +35,7 @@ from smogon_vgc_mcp.parser.replay import (
 __all__ = [
     "BattleState",
     "Bo3Info",
+    "Bo3Series",
     "BoostEvent",
     "DamageEvent",
     "EventType",
@@ -51,6 +54,7 @@ __all__ = [
     "TeraEvent",
     "Turn",
     "WeatherEvent",
+    "build_bo3_series",
     "extract_log_from_html",
     "extract_replay_id",
     "extract_replay_id_from_html",
