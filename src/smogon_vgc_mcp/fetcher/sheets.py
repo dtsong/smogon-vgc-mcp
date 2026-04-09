@@ -11,7 +11,12 @@ import aiosqlite
 from smogon_vgc_mcp.database.schema import get_connection, get_db_path, init_database
 from smogon_vgc_mcp.fetcher.pokepaste import fetch_pokepaste, parse_pokepaste
 from smogon_vgc_mcp.formats import DEFAULT_FORMAT, get_format, get_sheet_csv_url
-from smogon_vgc_mcp.resilience import FetchResult, get_all_circuit_states
+from smogon_vgc_mcp.resilience import (
+    ErrorCategory,
+    FetchResult,
+    ServiceError,
+    get_all_circuit_states,
+)
 from smogon_vgc_mcp.utils import fetch_text_resilient
 
 logger = logging.getLogger(__name__)
@@ -31,7 +36,14 @@ async def fetch_teams_from_sheet(format_code: str) -> FetchResult[list[dict]]:
 
     if not sheet_url:
         logger.warning("No Google Sheet configured for %s", fmt.name)
-        return FetchResult.ok([])
+        return FetchResult.fail(
+            ServiceError(
+                category=ErrorCategory.HTTP_CLIENT_ERROR,
+                service="sheets",
+                message=f"No sheet_gid configured for format {fmt.name}",
+                is_recoverable=False,
+            )
+        )
 
     result = await fetch_text_resilient(sheet_url, service="sheets")
     if not result.success or not result.data:

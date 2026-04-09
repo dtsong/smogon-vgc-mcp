@@ -20,6 +20,11 @@ class FormatConfig:
     team_id_prefix: str = ""  # "F" for Reg F teams
     sheet_gid: str | None = None  # Google Sheet tab GID for tournament teams
     is_current: bool = False  # Mark the current/default format
+    generation: int = 9  # Pokemon generation (9 = Scarlet/Violet, 10 = Champions)
+    stat_system: str = "gen9_ev_iv"  # Stat system: "gen9_ev_iv" or "champions_sp"
+    calc_backend: str = "smogon_calc_gen9"  # Calc backend: "smogon_calc_gen9" or "python_native"
+    smogon_stats_available: bool = True  # Whether Smogon chaos JSON stats exist
+    min_battles: int = 500  # Minimum battle count to consider stats reliable
 
 
 # Google Sheet ID for VGC Pastes Repository
@@ -34,20 +39,32 @@ FORMATS: dict[str, FormatConfig] = {
         available_months=["2025-11", "2025-12"],
         team_id_prefix="F",
         sheet_gid="1837599752",
+        is_current=False,
+    ),
+    "regi": FormatConfig(
+        code="regi",
+        name="Regulation I",
+        smogon_format_id="gen9vgc2026regibo3",
+        available_months=["2026-03", "2026-04", "2026-05"],
+        team_id_prefix="I",
+        sheet_gid=None,
         is_current=True,
     ),
-    # Add more formats as they become available:
-    # "regg": FormatConfig(
-    #     code="regg",
-    #     name="Regulation G",
-    #     smogon_format_id="gen9vgc2026reggbo3",
+    # Champions format (Gen 10) — uncomment when data sources are available:
+    # "champions_ma": FormatConfig(
+    #     code="champions_ma",
+    #     name="Champions Regulation M-A",
+    #     smogon_format_id="",
     #     available_months=[],
-    #     team_id_prefix="G",
-    #     sheet_gid=None,
+    #     generation=10,
+    #     stat_system="champions_sp",
+    #     calc_backend="python_native",
+    #     smogon_stats_available=False,
+    #     is_current=False,
     # ),
 }
 
-DEFAULT_FORMAT = "regf"
+DEFAULT_FORMAT = "regi"
 
 
 def get_format(code: str) -> FormatConfig:

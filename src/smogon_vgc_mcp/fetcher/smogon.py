@@ -52,10 +52,20 @@ async def store_snapshot_data(
     month: str,
     elo: int,
     data: dict,
-) -> int:
+    min_battles: int | None = None,
+) -> int | None:
     """Store fetched data into the database.
 
-    Returns the snapshot ID.
+    Returns the snapshot ID, or None if num_battles is below the threshold.
+
+    Args:
+        db: Database connection
+        format_code: Format code (e.g., "regf")
+        month: Month in YYYY-MM format
+        elo: ELO bracket
+        data: Parsed Smogon chaos JSON
+        min_battles: Minimum battle count required. If None, reads from
+            FormatConfig (default 500).
 
     Raises:
         RuntimeError: If snapshot or Pokemon usage record not found after insert.
@@ -66,6 +76,22 @@ async def store_snapshot_data(
         pokemon_data = data.get("data", {})
 
         num_battles = info.get("number of battles", 0)
+
+        # Resolve threshold: explicit param > FormatConfig > 500
+        if min_battles is None:
+            fmt_cfg = get_format(format_code)
+            min_battles = fmt_cfg.min_battles
+
+        if num_battles < min_battles:
+            logger.warning(
+                "Skipping snapshot %s/%s/ELO %s: %d battles < %d minimum",
+                format_code,
+                month,
+                elo,
+                num_battles,
+                min_battles,
+            )
+            return None
 
         # Insert or replace snapshot
         await db.execute(
@@ -224,6 +250,7 @@ async def fetch_and_store_all(
 
     success: list[dict] = []
     failed: list[dict] = []
+    skipped: list[dict] = []
     errors: list[dict] = []
     total_pokemon = 0
 
@@ -234,7 +261,24 @@ async def fetch_and_store_all(
                 result = await fetch_vgc_data(format_code, month, elo)
 
                 if result.success and result.data:
-                    await store_snapshot_data(db, format_code, month, elo, result.data)
+                    snapshot_id = await store_snapshot_data(
+                        db, format_code, month, elo, result.data
+                    )
+                    if snapshot_id is None:
+                        # Below min_battles threshold
+                        num_battles = result.data.get("info", {}).get(
+                            "number of battles", 0
+                        )
+                        skipped.append(
+                            {
+                                "month": month,
+                                "elo": elo,
+                                "reason": "insufficient_battles",
+                                "num_battles": num_battles,
+                                "min_battles": fmt.min_battles,
+                            }
+                        )
+                        continue
                     pokemon_count = len(result.data.get("data", {}))
                     success.append(
                         {
@@ -260,6 +304,7 @@ async def fetch_and_store_all(
     return {
         "success": success,
         "failed": failed,
+        "skipped": skipped,
         "errors": errors,
         "total_pokemon": total_pokemon,
         "circuit_states": get_all_circuit_states(),

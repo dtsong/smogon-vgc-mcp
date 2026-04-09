@@ -371,7 +371,7 @@ def parse_ts_object(content: str, object_name: str) -> dict:
     return result
 
 
-async def store_pokemon_data(db: aiosqlite.Connection, data: dict) -> int:
+async def store_pokemon_data(db: aiosqlite.Connection, data: dict, *, _commit: bool = True) -> int:
     """Store Pokemon species data."""
     # Clear existing data
     await db.execute("DELETE FROM dex_pokemon")
@@ -420,11 +420,12 @@ async def store_pokemon_data(db: aiosqlite.Connection, data: dict) -> int:
         )
         count += 1
 
-    await db.commit()
+    if _commit:
+        await db.commit()
     return count
 
 
-async def store_moves_data(db: aiosqlite.Connection, data: dict) -> int:
+async def store_moves_data(db: aiosqlite.Connection, data: dict, *, _commit: bool = True) -> int:
     """Store move data."""
     await db.execute("DELETE FROM dex_moves")
 
@@ -457,11 +458,14 @@ async def store_moves_data(db: aiosqlite.Connection, data: dict) -> int:
         )
         count += 1
 
-    await db.commit()
+    if _commit:
+        await db.commit()
     return count
 
 
-async def store_abilities_data(db: aiosqlite.Connection, data: dict) -> int:
+async def store_abilities_data(
+    db: aiosqlite.Connection, data: dict, *, _commit: bool = True
+) -> int:
     """Store ability data."""
     await db.execute("DELETE FROM dex_abilities")
 
@@ -483,11 +487,12 @@ async def store_abilities_data(db: aiosqlite.Connection, data: dict) -> int:
         )
         count += 1
 
-    await db.commit()
+    if _commit:
+        await db.commit()
     return count
 
 
-async def store_items_data(db: aiosqlite.Connection, data: dict) -> int:
+async def store_items_data(db: aiosqlite.Connection, data: dict, *, _commit: bool = True) -> int:
     """Store item data."""
     await db.execute("DELETE FROM dex_items")
 
@@ -510,11 +515,14 @@ async def store_items_data(db: aiosqlite.Connection, data: dict) -> int:
         )
         count += 1
 
-    await db.commit()
+    if _commit:
+        await db.commit()
     return count
 
 
-async def store_learnsets_data(db: aiosqlite.Connection, data: dict) -> int:
+async def store_learnsets_data(
+    db: aiosqlite.Connection, data: dict, *, _commit: bool = True
+) -> int:
     """Store learnset data."""
     await db.execute("DELETE FROM dex_learnsets")
 
@@ -530,11 +538,12 @@ async def store_learnsets_data(db: aiosqlite.Connection, data: dict) -> int:
             )
             count += 1
 
-    await db.commit()
+    if _commit:
+        await db.commit()
     return count
 
 
-async def store_type_chart(db: aiosqlite.Connection) -> int:
+async def store_type_chart(db: aiosqlite.Connection, *, _commit: bool = True) -> int:
     """Store type effectiveness chart."""
     await db.execute("DELETE FROM dex_type_chart")
 
@@ -550,12 +559,17 @@ async def store_type_chart(db: aiosqlite.Connection) -> int:
             )
             count += 1
 
-    await db.commit()
+    if _commit:
+        await db.commit()
     return count
 
 
 async def fetch_and_store_pokedex_all(db_path: Path | None = None) -> dict:
     """Fetch and store all Pokedex data.
+
+    All network fetches happen first, then all DELETE + INSERT operations
+    run inside a single transaction. If any store operation fails, the
+    entire transaction is rolled back so the previous good data stays intact.
 
     Returns:
         Dict with fetch results including error details and circuit states
@@ -567,6 +581,69 @@ async def fetch_and_store_pokedex_all(db_path: Path | None = None) -> dict:
     await init_database(db_path)
 
     errors: list[dict] = []
+
+    # ------------------------------------------------------------------
+    # Phase 1: Fetch all data into memory (no DB writes yet)
+    # ------------------------------------------------------------------
+    pokemon_data: dict | None = None
+    moves_data: dict | None = None
+    abilities_data: dict | None = None
+    items_data: dict | None = None
+    learnsets_data: dict | None = None
+
+    print("Fetching Pokemon data...")
+    pokemon_result = await fetch_json_resilient(POKEDEX_JSON_URL, service="showdown")
+    if pokemon_result.success and pokemon_result.data:
+        pokemon_data = pokemon_result.data
+    else:
+        error_info = {"source": "Pokemon", "message": "Failed to fetch Pokemon data"}
+        if pokemon_result.error:
+            error_info.update(pokemon_result.error.to_dict())
+        errors.append(error_info)
+
+    print("Fetching Moves data...")
+    moves_result = await fetch_json_resilient(MOVES_JSON_URL, service="showdown")
+    if moves_result.success and moves_result.data:
+        moves_data = moves_result.data
+    else:
+        error_info = {"source": "Moves", "message": "Failed to fetch Moves data"}
+        if moves_result.error:
+            error_info.update(moves_result.error.to_dict())
+        errors.append(error_info)
+
+    print("Fetching Abilities data...")
+    abilities_result = await fetch_text_resilient(ABILITIES_TS_URL, service="showdown")
+    if abilities_result.success and abilities_result.data:
+        abilities_data = parse_ts_object(abilities_result.data, "Abilities")
+    else:
+        error_info = {"source": "Abilities", "message": "Failed to fetch Abilities data"}
+        if abilities_result.error:
+            error_info.update(abilities_result.error.to_dict())
+        errors.append(error_info)
+
+    print("Fetching Items data...")
+    items_result = await fetch_text_resilient(ITEMS_TS_URL, service="showdown")
+    if items_result.success and items_result.data:
+        items_data = parse_ts_object(items_result.data, "Items")
+    else:
+        error_info = {"source": "Items", "message": "Failed to fetch Items data"}
+        if items_result.error:
+            error_info.update(items_result.error.to_dict())
+        errors.append(error_info)
+
+    print("Fetching Learnsets data...")
+    learnsets_result = await fetch_json_resilient(LEARNSETS_JSON_URL, service="showdown")
+    if learnsets_result.success and learnsets_result.data:
+        learnsets_data = learnsets_result.data
+    else:
+        error_info = {"source": "Learnsets", "message": "Failed to fetch Learnsets data"}
+        if learnsets_result.error:
+            error_info.update(learnsets_result.error.to_dict())
+        errors.append(error_info)
+
+    # ------------------------------------------------------------------
+    # Phase 2: Store all data in a single atomic transaction
+    # ------------------------------------------------------------------
     pokemon_count = 0
     moves_count = 0
     abilities_count = 0
@@ -575,72 +652,37 @@ async def fetch_and_store_pokedex_all(db_path: Path | None = None) -> dict:
     type_chart_count = 0
 
     async with get_connection(db_path) as db:
-        # Fetch and store Pokemon
-        print("Fetching Pokemon data...")
-        pokemon_result = await fetch_json_resilient(POKEDEX_JSON_URL, service="showdown")
-        if pokemon_result.success and pokemon_result.data:
-            pokemon_count = await store_pokemon_data(db, pokemon_result.data)
-            print(f"  Stored {pokemon_count} Pokemon")
-        else:
-            error_info = {"source": "Pokemon", "message": "Failed to fetch Pokemon data"}
-            if pokemon_result.error:
-                error_info.update(pokemon_result.error.to_dict())
-            errors.append(error_info)
+        try:
+            if pokemon_data is not None:
+                pokemon_count = await store_pokemon_data(db, pokemon_data, _commit=False)
+                print(f"  Stored {pokemon_count} Pokemon")
 
-        # Fetch and store Moves
-        print("Fetching Moves data...")
-        moves_result = await fetch_json_resilient(MOVES_JSON_URL, service="showdown")
-        if moves_result.success and moves_result.data:
-            moves_count = await store_moves_data(db, moves_result.data)
-            print(f"  Stored {moves_count} moves")
-        else:
-            error_info = {"source": "Moves", "message": "Failed to fetch Moves data"}
-            if moves_result.error:
-                error_info.update(moves_result.error.to_dict())
-            errors.append(error_info)
+            if moves_data is not None:
+                moves_count = await store_moves_data(db, moves_data, _commit=False)
+                print(f"  Stored {moves_count} moves")
 
-        # Fetch and store Abilities (from TypeScript)
-        print("Fetching Abilities data...")
-        abilities_result = await fetch_text_resilient(ABILITIES_TS_URL, service="showdown")
-        if abilities_result.success and abilities_result.data:
-            abilities_data = parse_ts_object(abilities_result.data, "Abilities")
-            abilities_count = await store_abilities_data(db, abilities_data)
-            print(f"  Stored {abilities_count} abilities")
-        else:
-            error_info = {"source": "Abilities", "message": "Failed to fetch Abilities data"}
-            if abilities_result.error:
-                error_info.update(abilities_result.error.to_dict())
-            errors.append(error_info)
+            if abilities_data is not None:
+                abilities_count = await store_abilities_data(db, abilities_data, _commit=False)
+                print(f"  Stored {abilities_count} abilities")
 
-        # Fetch and store Items (from TypeScript)
-        print("Fetching Items data...")
-        items_result = await fetch_text_resilient(ITEMS_TS_URL, service="showdown")
-        if items_result.success and items_result.data:
-            items_data = parse_ts_object(items_result.data, "Items")
-            items_count = await store_items_data(db, items_data)
-            print(f"  Stored {items_count} items")
-        else:
-            error_info = {"source": "Items", "message": "Failed to fetch Items data"}
-            if items_result.error:
-                error_info.update(items_result.error.to_dict())
-            errors.append(error_info)
+            if items_data is not None:
+                items_count = await store_items_data(db, items_data, _commit=False)
+                print(f"  Stored {items_count} items")
 
-        # Fetch and store Learnsets
-        print("Fetching Learnsets data...")
-        learnsets_result = await fetch_json_resilient(LEARNSETS_JSON_URL, service="showdown")
-        if learnsets_result.success and learnsets_result.data:
-            learnsets_count = await store_learnsets_data(db, learnsets_result.data)
-            print(f"  Stored {learnsets_count} learnset entries")
-        else:
-            error_info = {"source": "Learnsets", "message": "Failed to fetch Learnsets data"}
-            if learnsets_result.error:
-                error_info.update(learnsets_result.error.to_dict())
-            errors.append(error_info)
+            if learnsets_data is not None:
+                learnsets_count = await store_learnsets_data(db, learnsets_data, _commit=False)
+                print(f"  Stored {learnsets_count} learnset entries")
 
-        # Store Type Chart
-        print("Storing Type Chart...")
-        type_chart_count = await store_type_chart(db)
-        print(f"  Stored {type_chart_count} type matchups")
+            print("Storing Type Chart...")
+            type_chart_count = await store_type_chart(db, _commit=False)
+            print(f"  Stored {type_chart_count} type matchups")
+
+            # All stores succeeded — commit the transaction
+            await db.commit()
+        except Exception:
+            # Any failure rolls back ALL deletes and inserts
+            await db.rollback()
+            raise
 
     return {
         "pokemon": pokemon_count,

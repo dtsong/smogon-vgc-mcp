@@ -21,9 +21,9 @@ class TestFormatRegistry:
         """Test that default format exists in registry."""
         assert DEFAULT_FORMAT in FORMATS
 
-    def test_default_format_is_regf(self):
-        """Test that default format is regf."""
-        assert DEFAULT_FORMAT == "regf"
+    def test_default_format_is_regi(self):
+        """Test that default format is regi."""
+        assert DEFAULT_FORMAT == "regi"
 
     def test_regf_format_config(self):
         """Test Regulation F format configuration."""
@@ -31,8 +31,18 @@ class TestFormatRegistry:
         assert regf.code == "regf"
         assert regf.name == "Regulation F"
         assert regf.smogon_format_id == "gen9vgc2026regfbo3"
-        assert regf.is_current is True
+        assert regf.is_current is False
         assert regf.team_id_prefix == "F"
+
+    def test_regi_format_config(self):
+        """Test Regulation I format configuration."""
+        regi = FORMATS["regi"]
+        assert regi.code == "regi"
+        assert regi.name == "Regulation I"
+        assert regi.smogon_format_id == "gen9vgc2026regibo3"
+        assert regi.is_current is True
+        assert regi.team_id_prefix == "I"
+        assert regi.sheet_gid is None
 
     def test_format_has_available_months(self):
         """Test that format has available months."""
@@ -47,6 +57,14 @@ class TestFormatRegistry:
         assert 1500 in regf.available_elos
         assert 1630 in regf.available_elos
         assert 1760 in regf.available_elos
+
+    def test_format_config_new_fields_defaults(self):
+        """Test that new FormatConfig fields have correct defaults."""
+        regf = FORMATS["regf"]
+        assert regf.generation == 9
+        assert regf.stat_system == "gen9_ev_iv"
+        assert regf.calc_backend == "smogon_calc_gen9"
+        assert regf.smogon_stats_available is True
 
 
 class TestGetFormat:
@@ -78,10 +96,10 @@ class TestGetCurrentFormat:
         assert isinstance(fmt, FormatConfig)
         assert fmt.is_current is True
 
-    def test_current_format_is_regf(self):
-        """Test that current format is regf."""
+    def test_current_format_is_regi(self):
+        """Test that current format is regi."""
         fmt = get_current_format()
-        assert fmt.code == "regf"
+        assert fmt.code == "regi"
 
 
 class TestGetSmogonStatsURL:
