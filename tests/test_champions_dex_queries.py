@@ -1,7 +1,7 @@
 """Tests for Champions Pokedex database schema, store functions, and queries."""
 
-import pytest
 import aiosqlite
+import pytest
 
 from smogon_vgc_mcp.database.models import ChampionsDexPokemon
 from smogon_vgc_mcp.database.queries import (
@@ -23,9 +23,7 @@ async def _init_db(db_path):
 
 async def _get_tables(db_path) -> set[str]:
     async with aiosqlite.connect(db_path) as db:
-        async with db.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ) as cursor:
+        async with db.execute("SELECT name FROM sqlite_master WHERE type='table'") as cursor:
             rows = await cursor.fetchall()
     return {row[0] for row in rows}
 
@@ -114,13 +112,14 @@ class TestChampionsPokemonColumns:
             )
             await db.commit()
             async with db.execute(
-                "SELECT is_mega, base_form_id, mega_stone FROM champions_dex_pokemon WHERE id='charizard'"
+                "SELECT is_mega, base_form_id, mega_stone"
+                " FROM champions_dex_pokemon WHERE id='charizard'"
             ) as cursor:
                 row = await cursor.fetchone()
         assert row is not None
-        assert row[0] == 0       # is_mega default
-        assert row[1] is None    # base_form_id
-        assert row[2] is None    # mega_stone
+        assert row[0] == 0  # is_mega default
+        assert row[1] is None  # base_form_id
+        assert row[2] is None  # mega_stone
 
     @pytest.mark.asyncio
     async def test_insert_mega_pokemon(self):
@@ -139,14 +138,26 @@ class TestChampionsPokemonColumns:
                     is_mega, base_form_id, mega_stone)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    "charizardmegax", 6, "Charizard-Mega-X", "Fire", "Dragon",
-                    78, 130, 111, 130, 85, 100,
-                    1, "charizard", "Charizardite X",
+                    "charizardmegax",
+                    6,
+                    "Charizard-Mega-X",
+                    "Fire",
+                    "Dragon",
+                    78,
+                    130,
+                    111,
+                    130,
+                    85,
+                    100,
+                    1,
+                    "charizard",
+                    "Charizardite X",
                 ),
             )
             await db.commit()
             async with db.execute(
-                "SELECT is_mega, base_form_id, mega_stone FROM champions_dex_pokemon WHERE id='charizardmegax'"
+                "SELECT is_mega, base_form_id, mega_stone"
+                " FROM champions_dex_pokemon WHERE id='charizardmegax'"
             ) as cursor:
                 row = await cursor.fetchone()
         assert row[0] == 1
@@ -218,7 +229,9 @@ class TestStoreChampionsPokemonData:
         async with aiosqlite.connect(self.db_path) as db:
             await store_champions_pokemon_data(db, [_CHARIZARD_PARSE_OUTPUT])
             async with db.execute(
-                "SELECT id, num, name, type1, type2, hp, atk, is_mega, base_form_id FROM champions_dex_pokemon WHERE id='charizard'"
+                "SELECT id, num, name, type1, type2, hp, atk,"
+                " is_mega, base_form_id"
+                " FROM champions_dex_pokemon WHERE id='charizard'"
             ) as cursor:
                 row = await cursor.fetchone()
         assert row is not None
@@ -227,10 +240,10 @@ class TestStoreChampionsPokemonData:
         assert row[2] == "Charizard"
         assert row[3] == "Fire"
         assert row[4] == "Flying"
-        assert row[5] == 78   # hp
+        assert row[5] == 78  # hp
         assert row[6] == 104  # atk
-        assert row[7] == 0    # is_mega
-        assert row[8] is None # base_form_id
+        assert row[7] == 0  # is_mega
+        assert row[8] is None  # base_form_id
 
     @pytest.mark.asyncio
     async def test_store_with_mega_forms_count(self):
@@ -247,13 +260,15 @@ class TestStoreChampionsPokemonData:
         async with aiosqlite.connect(self.db_path) as db:
             await store_champions_pokemon_data(db, [_CHARIZARD_WITH_MEGA])
             async with db.execute(
-                "SELECT is_mega, base_form_id, mega_stone, type1, type2 FROM champions_dex_pokemon WHERE id='charizard-mega-x'"
+                "SELECT is_mega, base_form_id, mega_stone,"
+                " type1, type2 FROM champions_dex_pokemon"
+                " WHERE id='charizard-mega-x'"
             ) as cursor:
                 row = await cursor.fetchone()
         assert row is not None
-        assert row[0] == 1                  # is_mega
-        assert row[1] == "charizard"        # base_form_id
-        assert row[2] == "Charizardite X"   # mega_stone
+        assert row[0] == 1  # is_mega
+        assert row[1] == "charizard"  # base_form_id
+        assert row[2] == "Charizardite X"  # mega_stone
         assert row[3] == "Fire"
         assert row[4] == "Dragon"
 

@@ -10,7 +10,6 @@ from smogon_vgc_mcp.fetcher.champions_dex import (
 )
 from smogon_vgc_mcp.resilience.errors import FetchResult
 
-
 _VENUSAUR_PARSE_OUTPUT = {
     "id": "venusaur",
     "num": 3,
@@ -30,7 +29,8 @@ _VENUSAUR_HTML = """
 <h1>#003 Venusaur</h1>
 <table class="dextable">
   <tr><td class="fooinfo">#003</td></tr>
-  <tr><td class="cen"><img class="typeimg" alt="Grass-type"><img class="typeimg" alt="Poison-type"></td></tr>
+  <tr><td class="cen"><img class="typeimg" alt="Grass-type">
+  <img class="typeimg" alt="Poison-type"></td></tr>
   <tr><td class="fooleft">Abilities: <a>Overgrow</a></td></tr>
   <tr><td class="fooinfo">2.0m</td><td class="fooinfo">100.0kg</td></tr>
   <tr>
