@@ -16,7 +16,7 @@ def _validate_sp(sp: int) -> None:
         raise ValueError(f"SP must be 0-{MAX_SP_PER_STAT}, got {sp}")
 
 
-def calculate_champions_hp(base: int, sp: int, level: int = 100) -> int:
+def calculate_champions_hp(base: int, sp: int, level: int = 50) -> int:
     """Calculate Champions HP stat.
 
     HP = floor((2 * base) * level / 100) + level + 10 + sp
@@ -29,7 +29,7 @@ def calculate_champions_stat(
     base: int,
     sp: int,
     nature_multiplier: float = 1.0,
-    level: int = 100,
+    level: int = 50,
 ) -> int:
     """Calculate a Champions non-HP stat.
 
@@ -46,7 +46,7 @@ def calculate_all_champions_stats(
     base_stats: dict[str, int],
     sp_spread: dict[str, int],
     nature: str = "Hardy",
-    level: int = 100,
+    level: int = 50,
 ) -> dict[str, int] | None:
     """Calculate all 6 stats for a Pokemon in Champions format.
 
