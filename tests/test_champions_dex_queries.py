@@ -1,9 +1,10 @@
-"""Tests for Champions Pokedex database schema."""
+"""Tests for Champions Pokedex database schema and store functions."""
 
 import pytest
 import aiosqlite
 
 from smogon_vgc_mcp.database.schema import SCHEMA
+from smogon_vgc_mcp.fetcher.champions_dex import store_champions_pokemon_data
 
 
 async def _init_db(db_path):
@@ -145,3 +146,122 @@ class TestChampionsPokemonColumns:
         assert row[0] == 1
         assert row[1] == "charizard"
         assert row[2] == "Charizardite X"
+
+
+# ---------------------------------------------------------------------------
+# Task 6: store_champions_pokemon_data() tests
+# ---------------------------------------------------------------------------
+
+_CHARIZARD_PARSE_OUTPUT = {
+    "id": "charizard",
+    "num": 6,
+    "name": "Charizard",
+    "types": ["Fire", "Flying"],
+    "base_stats": {"hp": 78, "atk": 104, "def": 78, "spa": 159, "spd": 115, "spe": 100},
+    "abilities": ["Drought"],
+    "ability_hidden": None,
+    "height_m": 1.7,
+    "weight_kg": 90.5,
+    "mega_forms": [],
+}
+
+_CHARIZARD_WITH_MEGA = {
+    "id": "charizard",
+    "num": 6,
+    "name": "Charizard",
+    "types": ["Fire", "Flying"],
+    "base_stats": {"hp": 78, "atk": 104, "def": 78, "spa": 159, "spd": 115, "spe": 100},
+    "abilities": ["Drought"],
+    "ability_hidden": None,
+    "height_m": 1.7,
+    "weight_kg": 90.5,
+    "mega_forms": [
+        {
+            "slug": "charizard-mega-x",
+            "name": "Mega Charizard X",
+            "types": ["Fire", "Dragon"],
+            "stats": {"hp": 78, "atk": 130, "def": 111, "spa": 130, "spd": 85, "spe": 100},
+            "abilities": ["Tough Claws"],
+            "height_m": 1.7,
+            "weight_kg": 110.5,
+            "mega_stone": "Charizardite X",
+        }
+    ],
+}
+
+
+class TestStoreChampionsPokemonData:
+    """Tests for store_champions_pokemon_data()."""
+
+    @pytest.fixture(autouse=True)
+    def _setup(self, tmp_path):
+        self.db_path = tmp_path / "test.db"
+
+    @pytest.mark.asyncio
+    async def test_store_base_form_returns_count(self):
+        """Storing one base form returns count=1."""
+        await _init_db(self.db_path)
+        async with aiosqlite.connect(self.db_path) as db:
+            count = await store_champions_pokemon_data(db, [_CHARIZARD_PARSE_OUTPUT])
+        assert count == 1
+
+    @pytest.mark.asyncio
+    async def test_store_base_form_correct_columns(self):
+        """Stored base form has correct column values."""
+        await _init_db(self.db_path)
+        async with aiosqlite.connect(self.db_path) as db:
+            await store_champions_pokemon_data(db, [_CHARIZARD_PARSE_OUTPUT])
+            async with db.execute(
+                "SELECT id, num, name, type1, type2, hp, atk, is_mega, base_form_id FROM champions_dex_pokemon WHERE id='charizard'"
+            ) as cursor:
+                row = await cursor.fetchone()
+        assert row is not None
+        assert row[0] == "charizard"
+        assert row[1] == 6
+        assert row[2] == "Charizard"
+        assert row[3] == "Fire"
+        assert row[4] == "Flying"
+        assert row[5] == 78   # hp
+        assert row[6] == 104  # atk
+        assert row[7] == 0    # is_mega
+        assert row[8] is None # base_form_id
+
+    @pytest.mark.asyncio
+    async def test_store_with_mega_forms_count(self):
+        """Storing base + 1 Mega returns count=2."""
+        await _init_db(self.db_path)
+        async with aiosqlite.connect(self.db_path) as db:
+            count = await store_champions_pokemon_data(db, [_CHARIZARD_WITH_MEGA])
+        assert count == 2
+
+    @pytest.mark.asyncio
+    async def test_stored_mega_has_base_form_id(self):
+        """Stored Mega form has base_form_id=charizard and is_mega=1."""
+        await _init_db(self.db_path)
+        async with aiosqlite.connect(self.db_path) as db:
+            await store_champions_pokemon_data(db, [_CHARIZARD_WITH_MEGA])
+            async with db.execute(
+                "SELECT is_mega, base_form_id, mega_stone, type1, type2 FROM champions_dex_pokemon WHERE id='charizard-mega-x'"
+            ) as cursor:
+                row = await cursor.fetchone()
+        assert row is not None
+        assert row[0] == 1                  # is_mega
+        assert row[1] == "charizard"        # base_form_id
+        assert row[2] == "Charizardite X"   # mega_stone
+        assert row[3] == "Fire"
+        assert row[4] == "Dragon"
+
+    @pytest.mark.asyncio
+    async def test_no_commit_when_commit_false(self):
+        """_commit=False does not auto-commit; rows not visible outside transaction."""
+        await _init_db(self.db_path)
+        async with aiosqlite.connect(self.db_path) as db:
+            await store_champions_pokemon_data(db, [_CHARIZARD_PARSE_OUTPUT], _commit=False)
+            # Rollback without committing
+            await db.rollback()
+
+        # After rollback, no rows should exist
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute("SELECT COUNT(*) FROM champions_dex_pokemon") as cursor:
+                row = await cursor.fetchone()
+        assert row[0] == 0
