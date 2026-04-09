@@ -26,7 +26,7 @@ from smogon_vgc_mcp.calculator.champions_stats import (
 )
 from smogon_vgc_mcp.database.models import ChampionsDexPokemon
 from smogon_vgc_mcp.database.queries import get_champions_pokemon
-from smogon_vgc_mcp.utils import make_error_response
+from smogon_vgc_mcp.utils import ValidationError, make_error_response, validate_nature
 
 
 def _normalize_pokemon_id(pokemon: str) -> str:
@@ -151,6 +151,18 @@ def register_champions_calculator_tools(mcp: FastMCP) -> None:
             sp2: Second Pokemon's Speed SP (0-32).
             nature2: Second Pokemon's nature.
         """
+        # Validate inputs before DB lookups
+        for label, sp_val in [("sp1", sp1), ("sp2", sp2)]:
+            if sp_val < 0 or sp_val > MAX_SP_PER_STAT:
+                return make_error_response(
+                    f"{label} must be 0-{MAX_SP_PER_STAT}, got {sp_val}",
+                )
+        try:
+            validate_nature(nature1)
+            validate_nature(nature2)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         pokemon1_id = _normalize_pokemon_id(pokemon1)
         pokemon2_id = _normalize_pokemon_id(pokemon2)
 
@@ -168,15 +180,15 @@ def register_champions_calculator_tools(mcp: FastMCP) -> None:
                 hint="Check spelling or try the full name",
             )
 
-        for label, sp_val in [("sp1", sp1), ("sp2", sp2)]:
-            if sp_val < 0 or sp_val > MAX_SP_PER_STAT:
-                return make_error_response(
-                    f"{label} must be 0-{MAX_SP_PER_STAT}, got {sp_val}",
-                )
-
         return _compare_speeds(
-            dex1.name, dex1.base_stats["spe"], sp1, nature1,
-            dex2.name, dex2.base_stats["spe"], sp2, nature2,
+            dex1.name,
+            dex1.base_stats["spe"],
+            sp1,
+            nature1,
+            dex2.name,
+            dex2.base_stats["spe"],
+            sp2,
+            nature2,
         )
 
     @mcp.tool()
@@ -198,6 +210,14 @@ def register_champions_calculator_tools(mcp: FastMCP) -> None:
             sp: Speed SP allocation (0-32). Default 0.
             nature: Nature name (e.g., "Jolly" for +Spe). Default "Hardy".
         """
+        # Validate inputs before DB lookup
+        if sp < 0 or sp > MAX_SP_PER_STAT:
+            return make_error_response(f"SP must be 0-{MAX_SP_PER_STAT}, got {sp}")
+        try:
+            validate_nature(nature)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
         pokemon_id = _normalize_pokemon_id(pokemon)
         dex_entry = await _get_champions_base_stats(pokemon_id)
         if not dex_entry:
@@ -205,9 +225,6 @@ def register_champions_calculator_tools(mcp: FastMCP) -> None:
                 f"Pokemon '{pokemon}' not found in Champions dex",
                 hint="Check spelling or try the full name",
             )
-
-        if sp < 0 or sp > MAX_SP_PER_STAT:
-            return make_error_response(f"SP must be 0-{MAX_SP_PER_STAT}, got {sp}")
 
         speed = get_champions_speed(dex_entry.base_stats["spe"], sp, nature)
         return find_champions_speed_benchmarks(dex_entry.name, speed)
@@ -282,7 +299,9 @@ def register_champions_calculator_tools(mcp: FastMCP) -> None:
 
         # Calculate final stats with the optimized spread
         final_stats = calculate_all_champions_stats(
-            dex_entry.base_stats, result["sp_spread"], nature,
+            dex_entry.base_stats,
+            result["sp_spread"],
+            nature,
         )
 
         result["pokemon"] = dex_entry.name
