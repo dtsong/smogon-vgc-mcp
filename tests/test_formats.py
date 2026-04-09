@@ -172,3 +172,32 @@ class TestGetSheetCSVURL:
         """Test that sheet URL has CSV export format."""
         url = get_sheet_csv_url("regf")
         assert "out:csv" in url or "format=csv" in url
+
+
+class TestChampionsFormat:
+    """Tests for the Champions Regulation M-A format config."""
+
+    def test_champions_ma_exists(self):
+        fmt = get_format("champions_ma")
+        assert fmt.code == "champions_ma"
+        assert fmt.name == "Champions Regulation M-A"
+
+    def test_champions_ma_generation(self):
+        fmt = get_format("champions_ma")
+        assert fmt.generation == 10
+
+    def test_champions_ma_stat_system(self):
+        fmt = get_format("champions_ma")
+        assert fmt.stat_system == "champions_sp"
+
+    def test_champions_ma_calc_backend(self):
+        fmt = get_format("champions_ma")
+        assert fmt.calc_backend == "python_native"
+
+    def test_champions_ma_no_smogon_stats(self):
+        fmt = get_format("champions_ma")
+        assert fmt.smogon_stats_available is False
+
+    def test_champions_ma_not_current(self):
+        fmt = get_format("champions_ma")
+        assert fmt.is_current is False

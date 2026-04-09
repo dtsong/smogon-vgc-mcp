@@ -50,18 +50,17 @@ FORMATS: dict[str, FormatConfig] = {
         sheet_gid=None,
         is_current=True,
     ),
-    # Champions format (Gen 10) — uncomment when data sources are available:
-    # "champions_ma": FormatConfig(
-    #     code="champions_ma",
-    #     name="Champions Regulation M-A",
-    #     smogon_format_id="",
-    #     available_months=[],
-    #     generation=10,
-    #     stat_system="champions_sp",
-    #     calc_backend="python_native",
-    #     smogon_stats_available=False,
-    #     is_current=False,
-    # ),
+    "champions_ma": FormatConfig(
+        code="champions_ma",
+        name="Champions Regulation M-A",
+        smogon_format_id="",
+        available_months=[],
+        generation=10,
+        stat_system="champions_sp",
+        calc_backend="python_native",
+        smogon_stats_available=False,
+        is_current=False,
+    ),
 }
 
 DEFAULT_FORMAT = "regi"
