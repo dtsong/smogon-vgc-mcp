@@ -79,9 +79,6 @@ def suggest_hp_sp(base_hp: int, item: str | None, level: int = 50) -> dict[str, 
 
     # Calculate SP needed to reach target remainder
     needed = (target_remainder - current_remainder) % divisor
-    if needed > MAX_SP_PER_STAT:
-        needed = 0  # Can't reach optimal, return 0
-
     resulting_hp = base_hp_stat + needed
     return {
         "recommended_sp": needed,
