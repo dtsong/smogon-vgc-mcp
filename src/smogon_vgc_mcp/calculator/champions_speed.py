@@ -160,7 +160,9 @@ def find_champions_speed_sp(
             "target_speed": target_speed,
         }
 
-    # goal == "underspeed"
+    if goal != "underspeed":
+        raise ValueError(f"goal must be 'outspeed' or 'underspeed', got '{goal}'")
+
     if base_speed_no_sp < target_speed:
         return {
             "success": True,
