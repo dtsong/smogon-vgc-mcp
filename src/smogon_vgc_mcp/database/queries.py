@@ -8,6 +8,7 @@ import aiosqlite
 from smogon_vgc_mcp.database.models import (
     AbilityUsage,
     CheckCounter,
+    ChampionsDexPokemon,
     DexAbility,
     DexItem,
     DexMove,
@@ -1404,3 +1405,102 @@ async def get_pokedex_stats(db_path: Path | None = None) -> dict:
                 counts[table.replace("dex_", "")] = row[0] if row else 0
 
         return counts
+
+
+# =============================================================================
+# Champions Pokedex queries
+# =============================================================================
+
+
+def _row_to_champions_pokemon(row: aiosqlite.Row) -> ChampionsDexPokemon:
+    """Convert a DB row to a ChampionsDexPokemon dataclass."""
+    types = [row["type1"]] if row["type1"] else []
+    if row["type2"]:
+        types.append(row["type2"])
+
+    abilities = [a for a in [row["ability1"], row["ability2"]] if a]
+
+    base_stats = {
+        "hp": row["hp"],
+        "atk": row["atk"],
+        "def": row["def"],
+        "spa": row["spa"],
+        "spd": row["spd"],
+        "spe": row["spe"],
+    }
+
+    return ChampionsDexPokemon(
+        id=row["id"],
+        num=row["num"] or 0,
+        name=row["name"] or "",
+        types=types,
+        base_stats=base_stats,
+        abilities=abilities,
+        ability_hidden=row["ability_hidden"],
+        height_m=row["height_m"] or 0.0,
+        weight_kg=row["weight_kg"] or 0.0,
+        is_mega=bool(row["is_mega"]),
+        base_form_id=row["base_form_id"],
+        mega_stone=row["mega_stone"],
+    )
+
+
+async def get_champions_pokemon(
+    pokemon_id: str,
+    db_path: Path | None = None,
+) -> ChampionsDexPokemon | None:
+    """Get a Champions Pokemon by ID (base form or Mega slug)."""
+    async with get_connection(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM champions_dex_pokemon WHERE id = ?",
+            (pokemon_id,),
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return _row_to_champions_pokemon(row)
+    return None
+
+
+async def get_champions_pokemon_with_megas(
+    pokemon_id: str,
+    db_path: Path | None = None,
+) -> tuple[ChampionsDexPokemon | None, list[ChampionsDexPokemon]]:
+    """Get a base-form Pokemon and all its Mega forms.
+
+    Returns:
+        (base_form, mega_forms) — base_form is None if not found.
+    """
+    async with get_connection(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM champions_dex_pokemon WHERE id = ?",
+            (pokemon_id,),
+        ) as cursor:
+            base_row = await cursor.fetchone()
+
+        base = _row_to_champions_pokemon(base_row) if base_row else None
+
+        async with db.execute(
+            "SELECT * FROM champions_dex_pokemon WHERE base_form_id = ? AND is_mega = 1",
+            (pokemon_id,),
+        ) as cursor:
+            mega_rows = await cursor.fetchall()
+
+    megas = [_row_to_champions_pokemon(r) for r in mega_rows]
+    return base, megas
+
+
+async def search_champions_pokemon_by_type(
+    type_name: str,
+    db_path: Path | None = None,
+) -> list[ChampionsDexPokemon]:
+    """Find all Champions Pokemon that have a given type (type1 or type2)."""
+    async with get_connection(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM champions_dex_pokemon WHERE type1 = ? OR type2 = ? ORDER BY num, id",
+            (type_name, type_name),
+        ) as cursor:
+            rows = await cursor.fetchall()
+    return [_row_to_champions_pokemon(r) for r in rows]
