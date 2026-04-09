@@ -3,6 +3,8 @@
 from smogon_vgc_mcp.database.models import (
     AbilityUsage,
     CheckCounter,
+    ChampionsDexMove,
+    ChampionsDexPokemon,
     DexAbility,
     DexItem,
     DexMove,
@@ -502,3 +504,126 @@ class TestModelIntegration:
         assert len(team.pokemon) >= 2
         assert team.pokemon[0].pokemon == "Incineroar"
         assert team.pokemon[1].pokemon == "Flutter Mane"
+
+
+class TestChampionsDexPokemon:
+    """Tests for ChampionsDexPokemon dataclass."""
+
+    def test_create_base_form(self):
+        """Test creating a base-form Champions Pokemon."""
+        pokemon = ChampionsDexPokemon(
+            id="charizard",
+            num=6,
+            name="Charizard",
+            types=["Fire", "Flying"],
+            base_stats={"hp": 78, "atk": 84, "def": 78, "spa": 109, "spd": 85, "spe": 100},
+            abilities=["Blaze"],
+        )
+
+        assert pokemon.id == "charizard"
+        assert pokemon.num == 6
+        assert pokemon.types == ["Fire", "Flying"]
+        assert pokemon.base_stats["spa"] == 109
+        assert pokemon.is_mega is False
+        assert pokemon.base_form_id is None
+        assert pokemon.mega_stone is None
+
+    def test_create_mega_form(self):
+        """Test creating a Mega form with base_form_id link."""
+        mega = ChampionsDexPokemon(
+            id="charizardmegax",
+            num=6,
+            name="Charizard-Mega-X",
+            types=["Fire", "Dragon"],
+            base_stats={"hp": 78, "atk": 130, "def": 111, "spa": 130, "spd": 85, "spe": 100},
+            abilities=["Tough Claws"],
+            is_mega=True,
+            base_form_id="charizard",
+            mega_stone="Charizardite X",
+        )
+
+        assert mega.is_mega is True
+        assert mega.base_form_id == "charizard"
+        assert mega.mega_stone == "Charizardite X"
+        assert mega.types == ["Fire", "Dragon"]
+
+    def test_defaults(self):
+        """Test ChampionsDexPokemon optional field defaults."""
+        pokemon = ChampionsDexPokemon(
+            id="bulbasaur",
+            num=1,
+            name="Bulbasaur",
+            types=["Grass", "Poison"],
+            base_stats={"hp": 45, "atk": 49, "def": 49, "spa": 65, "spd": 65, "spe": 45},
+            abilities=["Overgrow"],
+        )
+
+        assert pokemon.ability_hidden is None
+        assert pokemon.height_m == 0.0
+        assert pokemon.weight_kg == 0.0
+        assert pokemon.is_mega is False
+        assert pokemon.base_form_id is None
+        assert pokemon.mega_stone is None
+
+
+class TestChampionsDexMove:
+    """Tests for ChampionsDexMove dataclass."""
+
+    def test_create_damaging_move(self):
+        """Test creating a damaging Champions move."""
+        move = ChampionsDexMove(
+            id="flamethrower",
+            num=53,
+            name="Flamethrower",
+            type="Fire",
+            category="Special",
+            base_power=90,
+            accuracy=100,
+            pp=15,
+            priority=0,
+            target="normal",
+            description="Deals damage and may burn the target.",
+            short_desc="10% chance to burn.",
+        )
+
+        assert move.id == "flamethrower"
+        assert move.type == "Fire"
+        assert move.category == "Special"
+        assert move.base_power == 90
+        assert move.accuracy == 100
+        assert move.pp == 15
+
+    def test_create_status_move(self):
+        """Test creating a status move (no base power or accuracy)."""
+        move = ChampionsDexMove(
+            id="protect",
+            num=182,
+            name="Protect",
+            type="Normal",
+            category="Status",
+            base_power=None,
+            accuracy=None,
+            pp=10,
+            priority=4,
+        )
+
+        assert move.base_power is None
+        assert move.accuracy is None
+        assert move.priority == 4
+        assert move.target is None
+        assert move.description is None
+
+    def test_rebalanced_move_higher_power(self):
+        """Test that Champions moves can have different base power values."""
+        move = ChampionsDexMove(
+            id="hyperbeam",
+            num=63,
+            name="Hyper Beam",
+            type="Normal",
+            category="Special",
+            base_power=150,
+            accuracy=90,
+            pp=5,
+        )
+
+        assert move.base_power == 150

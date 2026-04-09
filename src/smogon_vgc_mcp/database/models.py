@@ -224,3 +224,44 @@ class DexItem:
     short_desc: str | None = None
     fling_power: int | None = None
     gen: int | None = None
+
+
+# =============================================================================
+# Champions Pokedex data models (from Serebii)
+# =============================================================================
+
+
+@dataclass
+class ChampionsDexPokemon:
+    """Champions Pokemon species data (rebalanced stats, Mega forms)."""
+
+    id: str
+    num: int
+    name: str
+    types: list[str]
+    base_stats: dict[str, int]  # hp, atk, def, spa, spd, spe
+    abilities: list[str]
+    ability_hidden: str | None = None
+    height_m: float = 0.0
+    weight_kg: float = 0.0
+    is_mega: bool = False
+    base_form_id: str | None = None  # FK to base form for Megas
+    mega_stone: str | None = None
+
+
+@dataclass
+class ChampionsDexMove:
+    """Champions move data (includes rebalanced moves)."""
+
+    id: str
+    num: int
+    name: str
+    type: str
+    category: str
+    base_power: int | None
+    accuracy: int | None
+    pp: int
+    priority: int = 0
+    target: str | None = None
+    description: str | None = None
+    short_desc: str | None = None
