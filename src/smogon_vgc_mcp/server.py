@@ -7,6 +7,7 @@ from smogon_vgc_mcp.resources import register_vgc_resources
 from smogon_vgc_mcp.tools import (
     register_admin_tools,
     register_calculator_tools,
+    register_champions_calculator_tools,
     register_damage_tools,
     register_ev_generator_tools,
     register_pokedex_tools,
@@ -43,6 +44,7 @@ def create_server() -> FastMCP:
     register_ev_generator_tools(logged_mcp)
     register_pokedex_tools(logged_mcp)
     register_replay_tools(logged_mcp)
+    register_champions_calculator_tools(logged_mcp)
     register_admin_tools(logged_mcp)
 
     # Register resources (no logging needed for resources)

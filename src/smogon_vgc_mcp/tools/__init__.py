@@ -2,6 +2,7 @@
 
 from smogon_vgc_mcp.tools.admin import register_admin_tools
 from smogon_vgc_mcp.tools.calculator import register_calculator_tools
+from smogon_vgc_mcp.tools.champions_calculator import register_champions_calculator_tools
 from smogon_vgc_mcp.tools.damage import register_damage_tools
 from smogon_vgc_mcp.tools.ev_generator import register_ev_generator_tools
 from smogon_vgc_mcp.tools.pokedex import register_pokedex_tools
@@ -22,4 +23,5 @@ __all__ = [
     "register_pokedex_tools",
     "register_ev_generator_tools",
     "register_replay_tools",
+    "register_champions_calculator_tools",
 ]
