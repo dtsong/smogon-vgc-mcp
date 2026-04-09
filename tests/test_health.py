@@ -6,7 +6,6 @@ import pytest
 
 from smogon_vgc_mcp.health import (
     check_circuit_breakers,
-    check_data_availability,
     check_database,
     check_node_calc,
     check_tool_registration,

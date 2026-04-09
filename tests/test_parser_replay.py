@@ -3,9 +3,6 @@
 import pytest
 
 from smogon_vgc_mcp.parser.replay import (
-    Bo3Info,
-    Bo3Series,
-    BoostEvent,
     DamageEvent,
     FaintEvent,
     FieldEvent,
@@ -15,7 +12,6 @@ from smogon_vgc_mcp.parser.replay import (
     Pokemon,
     Replay,
     StatSpread,
-    StatusEvent,
     Team,
     TeraEvent,
     Turn,

@@ -11,7 +11,6 @@ from smogon_vgc_mcp.fetcher import (
 )
 from smogon_vgc_mcp.formats import DEFAULT_FORMAT, FORMATS, get_format
 from smogon_vgc_mcp.health import run_health_check
-from smogon_vgc_mcp.resilience import get_all_circuit_states
 from smogon_vgc_mcp.utils import (
     ValidationError,
     make_error_response,
