@@ -264,6 +264,76 @@ CREATE INDEX IF NOT EXISTS idx_dex_moves_type ON dex_moves(type);
 CREATE INDEX IF NOT EXISTS idx_dex_moves_category ON dex_moves(category);
 CREATE INDEX IF NOT EXISTS idx_dex_abilities_name ON dex_abilities(name);
 CREATE INDEX IF NOT EXISTS idx_dex_items_name ON dex_items(name);
+
+-- =============================================================================
+-- Champions Pokedex data (from Serebii)
+-- =============================================================================
+
+-- Champions Pokemon species data (rebalanced stats, Mega forms)
+CREATE TABLE IF NOT EXISTS champions_dex_pokemon (
+    id TEXT PRIMARY KEY,
+    num INTEGER,
+    name TEXT NOT NULL,
+    type1 TEXT NOT NULL,
+    type2 TEXT,
+    hp INTEGER NOT NULL,
+    atk INTEGER NOT NULL,
+    def INTEGER NOT NULL,
+    spa INTEGER NOT NULL,
+    spd INTEGER NOT NULL,
+    spe INTEGER NOT NULL,
+    ability1 TEXT,
+    ability2 TEXT,
+    ability_hidden TEXT,
+    base_form_id TEXT,
+    is_mega INTEGER NOT NULL DEFAULT 0,
+    mega_stone TEXT,
+    height_m REAL,
+    weight_kg REAL
+);
+
+-- Champions move data (includes rebalanced moves)
+CREATE TABLE IF NOT EXISTS champions_dex_moves (
+    id TEXT PRIMARY KEY,
+    num INTEGER,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL,
+    category TEXT NOT NULL,
+    base_power INTEGER,
+    accuracy INTEGER,
+    pp INTEGER,
+    priority INTEGER DEFAULT 0,
+    target TEXT,
+    description TEXT,
+    short_desc TEXT
+);
+
+-- Champions ability data
+CREATE TABLE IF NOT EXISTS champions_dex_abilities (
+    id TEXT PRIMARY KEY,
+    num INTEGER,
+    name TEXT NOT NULL,
+    description TEXT,
+    short_desc TEXT
+);
+
+-- Champions learnsets (Pokemon -> Move mapping)
+CREATE TABLE IF NOT EXISTS champions_dex_learnsets (
+    pokemon_id TEXT,
+    move_id TEXT,
+    method TEXT,
+    PRIMARY KEY (pokemon_id, move_id)
+);
+
+-- Indexes for Champions Pokedex queries
+CREATE INDEX IF NOT EXISTS idx_champ_pokemon_name ON champions_dex_pokemon(name);
+CREATE INDEX IF NOT EXISTS idx_champ_pokemon_type1 ON champions_dex_pokemon(type1);
+CREATE INDEX IF NOT EXISTS idx_champ_pokemon_type2 ON champions_dex_pokemon(type2);
+CREATE INDEX IF NOT EXISTS idx_champ_pokemon_base_form ON champions_dex_pokemon(base_form_id);
+CREATE INDEX IF NOT EXISTS idx_champ_pokemon_is_mega ON champions_dex_pokemon(is_mega);
+CREATE INDEX IF NOT EXISTS idx_champ_moves_type ON champions_dex_moves(type);
+CREATE INDEX IF NOT EXISTS idx_champ_moves_category ON champions_dex_moves(category);
+CREATE INDEX IF NOT EXISTS idx_champ_abilities_name ON champions_dex_abilities(name);
 """
 
 
