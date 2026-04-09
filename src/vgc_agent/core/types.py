@@ -126,6 +126,7 @@ class PokemonSet:
     nature: str | None = None
     evs: dict[str, int] = field(default_factory=dict)
     ivs: dict[str, int] = field(default_factory=dict)
+    stat_points: dict[str, int] | None = None  # Champions SP (0-32 per stat, 66 total)
     benchmarks: list[str] = field(default_factory=list)
 
     def to_showdown(self) -> str:
@@ -170,6 +171,34 @@ class PokemonSet:
             lines.append(f"- {move}")
         return "\n".join(lines)
 
+    def to_champions_format(self) -> str:
+        """Convert to Champions format (Stat Points instead of EVs/IVs, no Tera)."""
+        stat_names = {
+            "hp": "HP",
+            "atk": "Atk",
+            "def": "Def",
+            "spa": "SpA",
+            "spd": "SpD",
+            "spe": "Spe",
+        }
+        lines = []
+        if self.item:
+            lines.append(f"{self.species} @ {self.item}")
+        else:
+            lines.append(self.species)
+        if self.ability:
+            lines.append(f"Ability: {self.ability}")
+        lines.append("Level: 50")
+        if self.stat_points:
+            sp_parts = [f"{v} {stat_names[k]}" for k, v in self.stat_points.items() if v > 0]
+            if sp_parts:
+                lines.append(f"SPs: {' / '.join(sp_parts)}")
+        if self.nature:
+            lines.append(f"{self.nature} Nature")
+        for move in self.moves[:4]:
+            lines.append(f"- {move}")
+        return "\n".join(lines)
+
     def to_dict(self) -> dict:
         return {
             "species": self.species,
@@ -181,6 +210,7 @@ class PokemonSet:
             "nature": self.nature,
             "evs": self.evs,
             "ivs": self.ivs,
+            "stat_points": self.stat_points,
             "benchmarks": self.benchmarks,
         }
 
@@ -274,6 +304,7 @@ class SessionState:
 
     session_id: str
     requirements: str
+    format_code: str = "regi"  # Current default format
     phase: Phase = Phase.INITIALIZED
     iteration: int = 0
     max_iterations: int = 3
@@ -293,6 +324,7 @@ class SessionState:
         return {
             "session_id": self.session_id,
             "requirements": self.requirements,
+            "format_code": self.format_code,
             "phase": self.phase.value,
             "iteration": self.iteration,
             "max_iterations": self.max_iterations,

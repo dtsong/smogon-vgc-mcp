@@ -11,18 +11,28 @@ from vgc_agent.core.types import MatchupAnalysis, SessionState, TeamDesign, Toke
 
 CALCULATOR_SYSTEM_PROMPT = """You are the Calculator, a VGC damage calculation expert.
 
+FORMAT AWARENESS:
+- Gen 9 formats: use EVs (0-252 per stat, 508 total) and IVs.
+- Champions format: use Stat Points (0-32 per stat, 66 total) instead of EVs/IVs.
+Recommend stat investments appropriate to the format. Never mix conventions.
+
 CRITICAL RULES:
 1. Call get_top_pokemon first to identify the REAL meta threats
-2. Only calculate against Pokemon from usage data, not general knowledge
+2. Prefer usage data over general knowledge for threat identification
 3. Use analyze_matchup for head-to-head comparisons
 4. Use get_speed_benchmarks to verify speed tiers
 
+SPARSE-DATA FALLBACK:
+If usage data is unavailable, analyze matchups against known meta-relevant Pokemon \
+from the Pokedex. State explicitly that calcs are based on dex data, not usage stats.
+
 Your workflow:
 1. get_top_pokemon(limit=20) to see what Pokemon are actually common
-2. For each team member, analyze_matchup against top threats
-3. Identify OHKOs, 2HKOs, and survival benchmarks
-4. Use get_speed_benchmarks to check speed tiers
-5. Recommend EV investments based on calc results
+2. If results are empty/sparse, identify threats via dex_pokemon by stats and typing
+3. For each team member, analyze_matchup against top threats
+4. Identify OHKOs, 2HKOs, and survival benchmarks
+5. Use get_speed_benchmarks to check speed tiers
+6. Recommend stat investments (EVs for Gen 9, Stat Points for Champions) based on calc results
 
 Output as JSON:
 {
@@ -30,7 +40,8 @@ Output as JSON:
     "offensive_coverage": ["What the team threatens well"],
     "defensive_concerns": ["What threatens the team"],
     "speed_tiers": [{"pokemon": "Name", "speed": 150, "outspeeds": [], "outsped_by": []}],
-    "recommended_evs": {"Pokemon1": {"benchmark": "Survives X", "spread": "252 HP / 252 SpD"}}
+    "recommended_evs": {"Pokemon1": {"benchmark": "Survives X",
+        "spread": "252 HP / 252 SpD (Gen 9) or 32 HP / 32 SpD (Champions)"}}
 }"""
 
 CALCULATOR_TOOLS = [
@@ -79,9 +90,8 @@ class CalculatorAgent(BaseAgent):
     def _format_team(self, team: TeamDesign) -> str:
         lines = [f"Mode: {team.mode}", f"Game Plan: {team.game_plan}", "", "Pokemon:"]
         for p in team.pokemon:
-            lines.append(
-                f"- {p.species} @ {p.item or '?'} | {p.ability or '?'} | Tera: {p.tera_type or '?'}"
-            )
+            tera_part = f" | Tera: {p.tera_type}" if p.tera_type is not None else ""
+            lines.append(f"- {p.species} @ {p.item or '?'} | {p.ability or '?'}{tera_part}")
             if p.moves:
                 lines.append(f"  Moves: {', '.join(p.moves)}")
         return "\n".join(lines)

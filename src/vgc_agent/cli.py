@@ -175,12 +175,14 @@ async def run_cli(
     verbose: bool = False,
     budget: float | None = None,
     interactive: bool = False,
+    format_code: str = "regi",
 ) -> int:
     orchestrator = TeambuilderOrchestrator(
         mcp_command,
         budget=budget,
         interactive=interactive,
         human_input_callback=get_human_feedback if interactive else None,
+        format_code=format_code,
     )
 
     def on_event(event: Event) -> None:
@@ -250,6 +252,12 @@ def main() -> None:
         action="store_true",
         help="Enable human-in-the-loop mode for feedback after each iteration",
     )
+    parser.add_argument(
+        "--format",
+        default="regi",
+        dest="format_code",
+        help="VGC format code (default: regi)",
+    )
     args = parser.parse_args()
 
     try:
@@ -266,6 +274,7 @@ def main() -> None:
                 args.verbose,
                 args.budget,
                 args.interactive,
+                args.format_code,
             )
         )
     )

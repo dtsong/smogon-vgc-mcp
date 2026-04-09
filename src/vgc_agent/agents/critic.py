@@ -20,16 +20,22 @@ CRITIC_SYSTEM_PROMPT = """You are the Critic, a VGC expert who stress-tests team
 
 CRITICAL RULES:
 1. Call get_top_pokemon to identify REAL meta threats from usage data
-2. Only consider threats that actually appear in the meta, not theoretical ones
+2. Prefer threats that actually appear in the meta over theoretical ones
 3. Use get_pokemon_counters to find what beats each team member
 4. Use calculate_damage to verify threat severity
 
+SPARSE-DATA FALLBACK:
+If usage data is unavailable, assess threats based on type coverage, base stats, and \
+known strong Pokemon from the format's dex. State explicitly that your threat analysis \
+is based on dex data, not usage statistics.
+
 Your workflow:
 1. get_top_pokemon(limit=30) to see what's actually popular
-2. For each top threat, check if the team has an answer
-3. get_pokemon_counters for each team member to find their weaknesses
-4. calculate_damage to verify damage calcs for severe threats
-5. find_teams_with_pokemon_core to see how successful teams handle similar cores
+2. If results are empty/sparse, identify likely threats via dex_pokemon by stats/typing
+3. For each top threat, check if the team has an answer
+4. get_pokemon_counters for each team member to find their weaknesses
+5. calculate_damage to verify damage calcs for severe threats
+6. find_teams_with_pokemon_core to see how successful teams handle similar cores
 
 Severity ratings: minor, moderate, severe, critical
 
@@ -90,9 +96,8 @@ class CriticAgent(BaseAgent):
     def _format_team(self, team: TeamDesign) -> str:
         lines = [f"Mode: {team.mode}", f"Core: {', '.join(team.core)}", ""]
         for p in team.pokemon:
-            lines.append(
-                f"- {p.species} @ {p.item or '?'} | {p.ability or '?'} | Tera: {p.tera_type or '?'}"
-            )
+            tera_part = f" | Tera: {p.tera_type}" if p.tera_type is not None else ""
+            lines.append(f"- {p.species} @ {p.item or '?'} | {p.ability or '?'}{tera_part}")
         return "\n".join(lines)
 
     def _format_calcs(self, analysis: MatchupAnalysis | None) -> str:

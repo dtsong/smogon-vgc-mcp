@@ -33,6 +33,7 @@ class TeambuilderOrchestrator:
         budget: float | None = None,
         interactive: bool = False,
         human_input_callback: Callable[..., HumanFeedback] | None = None,
+        format_code: str = "regi",
     ):
         self.mcp_command = mcp_command
         self.anthropic = anthropic or Anthropic()
@@ -40,6 +41,7 @@ class TeambuilderOrchestrator:
         self.budget = budget
         self.interactive = interactive
         self.human_input_callback = human_input_callback
+        self.format_code = format_code
         self._mcp: MCPConnection | None = None
         self._events: EventEmitter | None = None
         self._state: SessionState | None = None
@@ -90,6 +92,7 @@ class TeambuilderOrchestrator:
         self._state = SessionState(
             session_id=session_id,
             requirements=requirements,
+            format_code=self.format_code,
             max_iterations=self.max_iterations,
             started_at=datetime.now(),
             token_usage=self._token_usage or TokenUsage(),
@@ -201,10 +204,11 @@ class TeambuilderOrchestrator:
 async def build_team(
     requirements: str,
     mcp_command: list[str] | None = None,
+    format_code: str = "regi",
 ) -> SessionState:
     if mcp_command is None:
         mcp_command = ["uv", "run", "smogon-vgc-mcp"]
-    orchestrator = TeambuilderOrchestrator(mcp_command)
+    orchestrator = TeambuilderOrchestrator(mcp_command, format_code=format_code)
     try:
         return await orchestrator.build_team(requirements)
     finally:

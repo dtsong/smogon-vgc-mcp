@@ -1,4 +1,4 @@
-"""Refiner agent - optimizes EV spreads and finalizes sets."""
+"""Refiner agent - optimizes stat distributions and finalizes sets."""
 
 from __future__ import annotations
 
@@ -11,7 +11,11 @@ from vgc_agent.core.events import EventEmitter
 from vgc_agent.core.mcp import MCPConnection
 from vgc_agent.core.types import SessionState, TeamDesign, TokenUsage
 
-REFINER_SYSTEM_PROMPT = """You are the Refiner, optimizing Pokemon sets and EV spreads.
+REFINER_SYSTEM_PROMPT = """You are the Refiner, optimizing Pokemon sets and stat distributions.
+
+FORMAT AWARENESS:
+Check the format context. Use EVs/Tera for Gen 9, Stat Points/no Tera for Champions.
+Never mix conventions across formats.
 
 CRITICAL RULES:
 1. Call get_pokemon_tournament_spreads for each Pokemon to see real tournament builds
@@ -26,14 +30,27 @@ Your workflow for each Pokemon:
 3. Pick the most common spread OR use suggest_ev_spread for custom needs
 4. Verify key benchmarks with calculate_damage
 
-Output the final team in Pokemon Showdown format:
+Output the final team in Pokemon Showdown format.
 
+For Gen 9 formats:
 # Benchmarks: Survives X from Y, OHKOs Z
 Pokemon @ Item
 Ability: Ability
 Level: 50
 Tera Type: Type
 EVs: X HP / X Atk / X Def / X SpA / X SpD / X Spe
+Nature Nature
+- Move 1
+- Move 2
+- Move 3
+- Move 4
+
+For Champions format:
+# Benchmarks: Survives X from Y, OHKOs Z
+Pokemon @ Item
+Ability: Ability
+Level: 50
+SPs: X HP / X Atk / X Def / X SpA / X SpD / X Spe
 Nature Nature
 - Move 1
 - Move 2
@@ -85,10 +102,8 @@ class RefinerAgent(BaseAgent):
     def _format_team(self, team: TeamDesign) -> str:
         lines = [f"Mode: {team.mode}", f"Game Plan: {team.game_plan}", ""]
         for p in team.pokemon:
-            lines.append(
-                f"{p.species} ({p.role}): {p.item or '?'} | {p.ability or '?'} | "
-                f"Tera: {p.tera_type or '?'}"
-            )
+            tera_part = f" | Tera: {p.tera_type}" if p.tera_type is not None else ""
+            lines.append(f"{p.species} ({p.role}): {p.item or '?'} | {p.ability or '?'}{tera_part}")
             if p.moves:
                 lines.append(f"  Moves: {', '.join(p.moves)}")
         return "\n".join(lines)
