@@ -13,10 +13,17 @@ This module handles the real Serebii HTML structure:
 
 from __future__ import annotations
 
+import asyncio
 import re
+from pathlib import Path
 
 import aiosqlite
 from bs4 import BeautifulSoup, Tag
+
+from smogon_vgc_mcp.database.schema import get_connection, get_db_path, init_database
+from smogon_vgc_mcp.fetcher.champions_pokemon_list import BASE_POKEMON
+from smogon_vgc_mcp.resilience import get_all_circuit_states
+from smogon_vgc_mcp.utils import fetch_text_resilient
 
 _PURE_TYPE_RE = re.compile(r"^([A-Za-z]+)-type$")
 # Matches type image src patterns: ".../type/fire.gif" or ".../type/fire.png"
@@ -440,3 +447,91 @@ async def store_champions_pokemon_data(
     if _commit:
         await db.commit()
     return count
+
+
+async def fetch_champions_pokemon_page(pokemon_slug: str) -> dict | None:
+    """Fetch a single Pokemon page from Serebii and parse it."""
+    url = f"https://www.serebii.net/pokedex-champions/{pokemon_slug}/"
+    result = await fetch_text_resilient(url, service="serebii")
+    if not result.success or not result.data:
+        return None
+    return parse_serebii_pokemon_page(result.data, pokemon_slug)
+
+
+async def fetch_and_store_champions_dex(
+    db_path: Path | None = None,
+    *,
+    dry_run: bool = False,
+    dry_run_names: list[str] | None = None,
+    request_delay: float = 1.0,
+) -> dict:
+    """Fetch all Champions Pokemon from Serebii and store atomically.
+
+    Phase 1: Fetch all pages into memory.
+    Phase 2: Store in a single transaction.
+
+    Args:
+        db_path: Path to SQLite DB. Uses default if None.
+        dry_run: Validate parsing on subset without storing to DB.
+        dry_run_names: Slugs to fetch in dry-run mode. Defaults to first 3 if not set.
+        request_delay: Seconds to wait between HTTP requests.
+
+    Returns:
+        Dict with keys: fetched, stored, errors, circuit_states.
+    """
+    if db_path is None:
+        db_path = get_db_path()
+
+    await init_database(db_path)
+
+    slugs: list[str]
+    if dry_run:
+        names = dry_run_names or [slug for slug, _ in BASE_POKEMON[:3]]
+        slugs = names
+    else:
+        slugs = [slug for slug, _ in BASE_POKEMON]
+
+    errors: list[dict] = []
+    results: list[dict] = []
+
+    # ------------------------------------------------------------------
+    # Phase 1: Fetch all pages into memory
+    # ------------------------------------------------------------------
+    for slug in slugs:
+        data = await fetch_champions_pokemon_page(slug)
+        if data is None:
+            errors.append({"slug": slug, "message": "Failed to fetch or parse page"})
+        else:
+            results.append(data)
+        if request_delay > 0:
+            await asyncio.sleep(request_delay)
+
+    if dry_run:
+        return {
+            "fetched": len(results),
+            "stored": 0,
+            "errors": errors,
+            "circuit_states": get_all_circuit_states(),
+            "dry_run": True,
+            "results": results,
+        }
+
+    # ------------------------------------------------------------------
+    # Phase 2: Store in single transaction
+    # ------------------------------------------------------------------
+    stored = 0
+    async with get_connection(db_path) as db:
+        try:
+            stored = await store_champions_pokemon_data(db, results, _commit=False)
+            await db.commit()
+        except Exception as exc:
+            await db.rollback()
+            errors.append({"slug": "store", "message": str(exc)})
+
+    return {
+        "fetched": len(results),
+        "stored": stored,
+        "errors": errors,
+        "circuit_states": get_all_circuit_states(),
+        "dry_run": False,
+    }
