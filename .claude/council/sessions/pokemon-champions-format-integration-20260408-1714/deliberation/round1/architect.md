@@ -1,0 +1,17 @@
+## Architect Position — Pokemon Champions Format Integration
+
+**Core recommendation:** Extend `FormatConfig` with a `generation` field and a `calc_backend` discriminator, then split the damage calculator into a backend protocol so Gen 9 (Node/@smogon/calc) and Champions (Python-native) are plug-in implementations behind one interface. The database schema needs a `generation` column on `dex_*` tables — not just `format` on snapshot tables — so Pokedex data for Champions doesn't collide with or override Gen 9 data.
+
+**Key argument:**
+The current system has two load-bearing assumptions baked in silently: (1) all formats are Gen 9 (evidenced by `Generations.get(9)` hardcoded in `calc_wrapper.js` and `TYPE_CHART` hardcoded in `pokemon_data.py`), and (2) the Pokedex is a single global namespace shared across all formats. Neither holds for Champions. The damage calc backend selection must be declarative at the `FormatConfig` level — `calc_backend: "smogon_calc_gen9" | "python_native" | "smogon_calc_champions"` — so the `damage.py` dispatcher can route without conditional logic scattered across callers. The `dex_pokemon`, `dex_moves`, `dex_abilities`, `dex_items`, and `dex_learnsets` tables need a `game` column (`"gen9"` | `"champions"`) added as part of a new migration. Without this, fetching Champions Pokedex data will corrupt Gen 9 lookups, since names may collide (remakes, reboots) or stat values will differ.
+
+**Risks if ignored:**
+- **Data collision:** Loading Champions Pokedex data into the existing `dex_pokemon` table without a `game` discriminator will silently overwrite Gen 9 stats for any Pokemon that appears in both games. Downstream stat calculations and type analysis will produce wrong results with no error surfaced.
+- **Calculator fragility:** The hardcoded `Generations.get(9)` in `calc_wrapper.js` will throw or silently miscalculate if Champions data is passed to it before a Champions-aware @smogon/calc version is released. Without the backend protocol, every call site needs manual guarding.
+- **Format sprawl without seams:** If `FormatConfig` stays generation-agnostic at the schema level, adding Reg I (Gen 9) is safe but adding Champions will require grep-and-patch across formats, calculator, fetcher, and tools layers simultaneously — no single extension point.
+
+**Dependencies on other domains:**
+- **Scout** — Need a complete enumeration of what data sources exist for Champions day 1: is there a Showdown data file, a Champions-equivalent chaos JSON URL pattern, an equivalent of pokepaste.es? The fetcher strategy depends entirely on what's reachable.
+- **Strategist** — Need a prioritization call: does the Python damage calc need to be feature-complete (all mechanics) or is a best-effort approximation (base damage formula, type chart, spread EVs) acceptable for day 1? This scopes the calculator effort dramatically.
+- **Oracle** — Need knowledge of whether @smogon/calc has a Champions generation in its roadmap/issues, and what the Champions type system looks like (are there new types? type chart changes?). These are unknowns that determine whether the Python calc is temporary or permanent.
+- **Skeptic** — Need a challenge on whether splitting `dex_*` tables by `game` column is the right call versus separate table sets or separate database files. There is a real argument for complete schema isolation (separate `champions_dex_pokemon` etc.) to avoid migration complexity on the shared tables.

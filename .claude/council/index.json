@@ -1,0 +1,20 @@
+{
+  "version": "1.0",
+  "workspace": "/Users/danielsong/Development/personal/pokemon/smogon-vgc-mcp",
+  "sessions": [
+    {
+      "id": "pokemon-champions-format-integration-20260408-1714",
+      "slug": "pokemon-champions-format-integration",
+      "idea": "Add Pokemon Champions format data to the MCP server — new generation, new data sources, in-game ladder stats",
+      "created": "2026-04-08T17:14:00-04:00",
+      "updated": "2026-04-08T17:14:00-04:00",
+      "phase": "interview",
+      "status": "active",
+      "agents": [],
+      "skills_used": [],
+      "contract_generated": false,
+      "contract_issue": null,
+      "archived_to": null
+    }
+  ]
+}

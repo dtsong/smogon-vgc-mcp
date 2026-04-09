@@ -1,0 +1,7 @@
+## Strategist Response to Oracle
+
+**Their position:** `game` scoping in tool signatures and agent prompt guardrails must ship before any Champions data exists, or agents will hallucinate Gen 9 data into Champions queries and existing grounding mechanisms break.
+
+**My response:** Modify
+
+**Reasoning:** Oracle is correct that data bleed and hallucination are active risks the moment a user routes a Champions query through existing tools — but the scope of "Phase 0 architecture prep" must be scoped tightly or it becomes a scope creep vector. Adding a `game` parameter to tool signatures and updating agent prompts to gate on it is genuinely low-effort, high-impact work that costs 1-2 days and requires no external data to be confirmed. This is worth pulling into Phase 0 alongside Reg I. What I won't concede is treating this as a reason to also start the calc engine or Pokedex pipeline early — those remain blocked until a data source is confirmed. Scout's finding on Stat Points and the 169-mon dex is load-bearing: it confirms the Python calc is a larger lift than initially scoped, which makes it even more important to not start building it speculatively before we know what data we're ingesting. Revised Phase 0 is: Reg I config + game-scoped tool signatures + agent prompt guardrails (return graceful "no Champions data yet" errors rather than Gen 9 fallback). That contains the hallucination risk without unblocking scope that depends on data we don't have.
