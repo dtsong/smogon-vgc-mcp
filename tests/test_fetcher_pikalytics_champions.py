@@ -2,9 +2,14 @@
 
 from pathlib import Path
 
+import aiosqlite
 import pytest
 
-from smogon_vgc_mcp.fetcher.pikalytics_champions import parse_pikalytics_page
+from smogon_vgc_mcp.database.schema import SCHEMA
+from smogon_vgc_mcp.fetcher.pikalytics_champions import (
+    parse_pikalytics_page,
+    store_champions_usage,
+)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "pikalytics_incineroar.html"
 
@@ -43,3 +48,73 @@ def test_parse_extracts_items_abilities_teammates(html: str) -> None:
 def test_parse_handles_404() -> None:
     assert parse_pikalytics_page("", pokemon_slug="missingno") is None
     assert parse_pikalytics_page("<html>Not Found</html>", pokemon_slug="missingno") is None
+
+
+@pytest.mark.asyncio
+async def test_store_creates_snapshot_and_rows() -> None:
+    payload = [
+        {
+            "pokemon": "incineroar",
+            "usage_percent": 35.8,
+            "rank": 1,
+            "raw_count": None,
+            "moves": [("Fake Out", 95.2), ("Flare Blitz", 78.1)],
+            "items": [("Safety Goggles", 40.0)],
+            "abilities": [("Intimidate", 100.0)],
+            "teammates": [("Farigiraf", 22.0)],
+            "spreads": [],
+        }
+    ]
+    async with aiosqlite.connect(":memory:") as db:
+        await db.executescript(SCHEMA)
+        await db.execute("PRAGMA foreign_keys = ON")
+        snapshot_id, count = await store_champions_usage(db, elo_cutoff="0+", pokemon_data=payload)
+        assert snapshot_id > 0
+        assert count == 1
+        async with db.execute("SELECT COUNT(*) FROM champions_usage_moves") as cursor:
+            (moves_count,) = await cursor.fetchone()
+        async with db.execute("SELECT COUNT(*) FROM champions_usage_abilities") as cursor:
+            (ab_count,) = await cursor.fetchone()
+    assert moves_count == 2
+    assert ab_count == 1
+
+
+@pytest.mark.asyncio
+async def test_store_replaces_same_elo_snapshot() -> None:
+    async with aiosqlite.connect(":memory:") as db:
+        await db.executescript(SCHEMA)
+        await db.execute("PRAGMA foreign_keys = ON")
+        first = [
+            {
+                "pokemon": "incineroar",
+                "usage_percent": 35.8,
+                "rank": 1,
+                "raw_count": None,
+                "moves": [("A", 10.0)],
+                "items": [],
+                "abilities": [],
+                "teammates": [],
+                "spreads": [],
+            }
+        ]
+        await store_champions_usage(db, elo_cutoff="0+", pokemon_data=first)
+        second = [
+            {
+                "pokemon": "incineroar",
+                "usage_percent": 40.0,
+                "rank": 1,
+                "raw_count": None,
+                "moves": [("B", 20.0)],
+                "items": [],
+                "abilities": [],
+                "teammates": [],
+                "spreads": [],
+            }
+        ]
+        await store_champions_usage(db, elo_cutoff="0+", pokemon_data=second)
+        async with db.execute("SELECT COUNT(*) FROM champions_usage_snapshots") as cursor:
+            (snap_count,) = await cursor.fetchone()
+        async with db.execute("SELECT move, percent FROM champions_usage_moves") as cursor:
+            rows = await cursor.fetchall()
+    assert snap_count == 1
+    assert rows == [("B", 20.0)]
