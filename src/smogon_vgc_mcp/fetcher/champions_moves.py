@@ -19,6 +19,7 @@ Only Champions-game values are extracted; S/V rows are ignored.
 
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 
@@ -28,6 +29,8 @@ from bs4 import BeautifulSoup, Tag
 from smogon_vgc_mcp.database.schema import get_connection, get_db_path, init_database
 from smogon_vgc_mcp.resilience import get_all_circuit_states
 from smogon_vgc_mcp.utils import fetch_text_resilient
+
+logger = logging.getLogger(__name__)
 
 SEREBII_MOVES_URL = "https://www.serebii.net/pokemonchampions/updatedattacks.shtml"
 
@@ -42,23 +45,40 @@ _CATEGORY_MAP: dict[str, str] = {
 # Matches "/type/<name>.gif" or "/type/<name>.png" in img src attributes.
 _TYPE_SRC_RE = re.compile(r"/type/([a-z]+)\.(?:gif|png)$", re.I)
 
+# Legitimate "no value" sentinels for numeric cells (status moves, etc.).
+# Anything else that fails int() is a layout regression and must be surfaced,
+# not silently coerced to None.
+_NUMERIC_SENTINELS = frozenset({"", "--", "—", "-"})
+
+
+class ParseError(ValueError):
+    """Raised when a numeric cell contains unparseable non-sentinel text."""
+
 
 def _slugify_move(name: str) -> str:
     """Convert a move name to a lowercase alphanumeric slug (no separators)."""
     return re.sub(r"[^a-z0-9]", "", name.lower())
 
 
-def _parse_int_or_none(text: str) -> int | None:
-    """Return int if parseable, else None. "--", "—", "101" (always-hits) → None."""
+def _parse_int_or_none(text: str, *, field: str = "value") -> int | None:
+    """Return int if parseable, None for documented sentinels, raise on garbage.
+
+    Sentinels (legitimate "no value"): "", "--", "—", "-", and 101 in the
+    accuracy column (Serebii's "always hits" marker). Any other text that
+    fails int() is a parser regression and raises ParseError so the caller
+    can surface it rather than silently coercing to None.
+    """
     cleaned = text.strip()
-    if not cleaned or cleaned in ("--", "—", "-"):
+    if cleaned in _NUMERIC_SENTINELS:
         return None
     try:
         val = int(cleaned)
-        # 101 is Serebii's sentinel for "always hits" (no accuracy check).
-        return None if val == 101 else val
-    except ValueError:
+    except ValueError as exc:
+        raise ParseError(f"unparseable {field}: {cleaned!r}") from exc
+    # 101 is Serebii's sentinel for "always hits" in the accuracy column.
+    if field == "accuracy" and val == 101:
         return None
+    return val
 
 
 def _type_from_img(td: Tag) -> str | None:
@@ -87,7 +107,10 @@ def _category_from_img(td: Tag) -> str | None:
     return _CATEGORY_MAP.get(key)
 
 
-def parse_serebii_moves_page(html: str) -> list[dict]:
+def parse_serebii_moves_page(
+    html: str,
+    skip_reasons: dict[str, int] | None = None,
+) -> list[dict]:
     """Parse the Serebii updated attacks page into a list of move dicts.
 
     Each dict contains:
@@ -104,6 +127,11 @@ def parse_serebii_moves_page(html: str) -> list[dict]:
       short_desc   – same as description (Serebii provides one text;
                      mirrored for schema parity with ChampionsDexMove)
 
+    Rows skipped for unexpected reasons (missing type/category image,
+    empty name, garbage numeric cells) are counted into *skip_reasons* if
+    provided so the caller can surface layout regressions. Structural
+    skips (header rows, S/V rows) are silent.
+
     Returns an empty list for empty or malformed HTML.
     """
     if not html or len(html.strip()) < 100:
@@ -114,11 +142,16 @@ def parse_serebii_moves_page(html: str) -> list[dict]:
     if table is None:
         return []
 
+    def _skip(reason: str) -> None:
+        if skip_reasons is not None:
+            skip_reasons[reason] = skip_reasons.get(reason, 0) + 1
+
     moves: list[dict] = []
 
     for row in table.find_all("tr"):
         cells = row.find_all("td")
-        # Champions rows have exactly 9 cells; skip header and S/V rows.
+        # Champions rows have exactly 9 cells; header and S/V rows are a
+        # structural part of the page — not regressions.
         if len(cells) != 9:
             continue
         if cells[1].get_text(strip=True) != "Champions":
@@ -128,17 +161,31 @@ def parse_serebii_moves_page(html: str) -> list[dict]:
         name_a = cells[0].find("a")
         name = name_a.get_text(strip=True) if name_a else cells[0].get_text(strip=True)
         if not name:
+            _skip("missing_name")
+            logger.warning("Serebii row dropped: missing move name")
             continue
 
         move_type = _type_from_img(cells[2])
-        category = _category_from_img(cells[3])
-
-        if move_type is None or category is None:
+        if move_type is None:
+            _skip("missing_type_img")
+            logger.warning("Serebii row dropped: missing type image for %r", name)
             continue
 
-        pp = _parse_int_or_none(cells[4].get_text(strip=True))
-        base_power = _parse_int_or_none(cells[5].get_text(strip=True))
-        accuracy = _parse_int_or_none(cells[6].get_text(strip=True))
+        category = _category_from_img(cells[3])
+        if category is None:
+            _skip("missing_category_img")
+            logger.warning("Serebii row dropped: missing category image for %r", name)
+            continue
+
+        try:
+            pp = _parse_int_or_none(cells[4].get_text(strip=True), field="pp")
+            base_power = _parse_int_or_none(cells[5].get_text(strip=True), field="base_power")
+            accuracy = _parse_int_or_none(cells[6].get_text(strip=True), field="accuracy")
+        except ParseError as exc:
+            _skip("unparseable_numeric")
+            logger.warning("Serebii row dropped for %r: %s", name, exc)
+            continue
+
         description = cells[7].get_text(" ", strip=True) or None
 
         moves.append(
@@ -179,6 +226,10 @@ async def store_champions_moves(
     await db.execute("DELETE FROM champions_dex_moves")
     count = 0
     for m in moves:
+        # Every field in the parser output is populated explicitly (see
+        # parse_serebii_moves_page) — use direct key access so a future
+        # schema change to the parser fails loudly instead of silently
+        # storing NULLs. `num` is the one field the parser never sets.
         await db.execute(
             """INSERT OR REPLACE INTO champions_dex_moves
                (id, num, name, type, category, base_power, accuracy, pp,
@@ -190,13 +241,13 @@ async def store_champions_moves(
                 m["name"],
                 m["type"],
                 m["category"],
-                m.get("base_power"),
-                m.get("accuracy"),
-                m.get("pp"),
-                m.get("priority", 0),
-                m.get("target"),
-                m.get("description"),
-                m.get("short_desc"),
+                m["base_power"],
+                m["accuracy"],
+                m["pp"],
+                m["priority"],
+                m["target"],
+                m["description"],
+                m["short_desc"],
             ),
         )
         count += 1
@@ -222,7 +273,8 @@ async def fetch_and_store_champions_moves(
     result = await fetch_text_resilient(SEREBII_MOVES_URL, service="serebii")
     errors: list[dict] = []
     if not result.success or not result.data:
-        errors.append({"url": SEREBII_MOVES_URL, "message": "Fetch failed"})
+        err_msg = result.error.message if result.error else "fetch returned no data"
+        errors.append({"url": SEREBII_MOVES_URL, "message": err_msg})
         return {
             "fetched": 0,
             "stored": 0,
@@ -231,7 +283,15 @@ async def fetch_and_store_champions_moves(
             "dry_run": dry_run,
         }
 
-    moves = parse_serebii_moves_page(result.data)
+    skip_reasons: dict[str, int] = {}
+    moves = parse_serebii_moves_page(result.data, skip_reasons=skip_reasons)
+    if skip_reasons:
+        errors.append(
+            {
+                "url": SEREBII_MOVES_URL,
+                "message": f"parser skipped rows: {skip_reasons}",
+            }
+        )
 
     if dry_run:
         return {

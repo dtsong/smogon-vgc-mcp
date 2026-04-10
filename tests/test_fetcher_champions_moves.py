@@ -7,6 +7,8 @@ import pytest
 
 from smogon_vgc_mcp.database.schema import SCHEMA
 from smogon_vgc_mcp.fetcher.champions_moves import (
+    ParseError,
+    _parse_int_or_none,
     fetch_and_store_champions_moves,
     parse_serebii_moves_page,
     store_champions_moves,
@@ -254,4 +256,87 @@ async def test_fetch_and_store_orchestrator_records_fetch_failure(
     assert result["fetched"] == 0
     assert result["stored"] == 0
     assert len(result["errors"]) == 1
-    assert result["errors"][0]["message"] == "Fetch failed"
+    # Real fetch error message is propagated verbatim so debugging doesn't
+    # require re-running against a live server.
+    assert result["errors"][0]["message"] == "down"
+
+
+# ---------------------------------------------------------------------------
+# Numeric-cell sentinel vs. garbage handling
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("text", ["", "--", "—", "-", "  "])
+def test_parse_int_or_none_accepts_sentinels(text: str) -> None:
+    """Legitimate "no value" cells return None without error."""
+    assert _parse_int_or_none(text, field="pp") is None
+
+
+def test_parse_int_or_none_always_hits_sentinel_only_in_accuracy() -> None:
+    """101 is an accuracy-only sentinel; same value elsewhere is a real int."""
+    assert _parse_int_or_none("101", field="accuracy") is None
+    assert _parse_int_or_none("101", field="base_power") == 101
+
+
+def test_parse_int_or_none_raises_on_garbage() -> None:
+    """Unparseable text must raise so the row is skipped loudly, not silently."""
+    with pytest.raises(ParseError):
+        _parse_int_or_none("100 (+10)", field="pp")
+    with pytest.raises(ParseError):
+        _parse_int_or_none("N/A", field="accuracy")
+
+
+# ---------------------------------------------------------------------------
+# Parser skip-reason tracking (layout regression early warning)
+# ---------------------------------------------------------------------------
+
+
+def test_parse_tracks_unexpected_skip_reasons() -> None:
+    """A Champions row with a broken type image is counted, not silently dropped.
+
+    Regression: without skip tracking, a Serebii icon-filename change could
+    drop every Fairy move with zero visible errors.
+    """
+    # Type image uses a .svg extension — matching a hypothetical Serebii
+    # layout change the _TYPE_SRC_RE pattern (.gif|.png) won't catch.
+    html = """
+    <html><body><table class="tab">
+      <tr>
+        <td><a href="/moves/bad">Bad Move</a></td>
+        <td>Champions</td>
+        <td><img src="/i/type/fire.svg"></td>
+        <td><img src="/i/type/physical.gif"></td>
+        <td>10</td><td>80</td><td>100</td><td>does stuff</td><td>--</td>
+      </tr>
+    </table></body></html>
+    """ + (" " * 200)
+    skip_reasons: dict[str, int] = {}
+    moves = parse_serebii_moves_page(html, skip_reasons=skip_reasons)
+    assert moves == []
+    assert skip_reasons == {"missing_type_img": 1}
+
+
+def test_parse_tracks_unparseable_numeric_skip() -> None:
+    """Garbage PP text surfaces as an unparseable_numeric skip, not a silent drop."""
+    html = """
+    <html><body><table class="tab">
+      <tr>
+        <td><a href="/moves/x">X Move</a></td>
+        <td>Champions</td>
+        <td><img src="/i/type/fire.gif"></td>
+        <td><img src="/i/type/physical.gif"></td>
+        <td>N/A</td><td>80</td><td>100</td><td>does stuff</td><td>--</td>
+      </tr>
+    </table></body></html>
+    """ + (" " * 200)
+    skip_reasons: dict[str, int] = {}
+    moves = parse_serebii_moves_page(html, skip_reasons=skip_reasons)
+    assert moves == []
+    assert skip_reasons == {"unparseable_numeric": 1}
+
+
+def test_parse_slugs_are_unique(fixture_html: str) -> None:
+    """Slug collisions would silently overwrite moves via INSERT OR REPLACE."""
+    moves = parse_serebii_moves_page(fixture_html)
+    slugs = [m["id"] for m in moves]
+    assert len(slugs) == len(set(slugs)), "duplicate move slugs would cause silent data loss"

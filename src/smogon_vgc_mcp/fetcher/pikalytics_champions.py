@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Any
@@ -25,9 +26,12 @@ from smogon_vgc_mcp.database.schema import get_connection, get_db_path, init_dat
 from smogon_vgc_mcp.resilience import get_all_circuit_states
 from smogon_vgc_mcp.utils import fetch_text_resilient
 
-# Matches "Label Name (41.092%)" patterns in FAQ answer text
-_FAQ_ENTRY_RE = re.compile(r"([A-Za-z][^(]+?)\s*\(([\d.]+)%\)")
-_USAGE_RE = re.compile(r"Usage\s+Percent\s+([\d.]+)\s*%", re.I)
+logger = logging.getLogger(__name__)
+
+# Matches "Label Name (41.092%)" patterns in FAQ answer text. The percentage
+# group is a strict decimal so float() cannot fail downstream.
+_FAQ_ENTRY_RE = re.compile(r"([A-Za-z][^(]+?)\s*\((\d+(?:\.\d+)?)%\)")
+_USAGE_RE = re.compile(r"Usage\s+Percent\s+(\d+(?:\.\d+)?)\s*%", re.I)
 
 # Preamble terminators: FAQ answers start with "The top X are ...", "... synergizes well with ..."
 _PREAMBLE_SEPS = (" are ", " include ", " is ", " with ")
@@ -49,11 +53,17 @@ def _strip_faq_preamble(answer: str) -> str:
 
 
 def _extract_faq_answers(soup: BeautifulSoup) -> dict[str, str]:
-    """Return a mapping of lowercased question keyword -> answer text from FAQPage JSON-LD."""
+    """Return a mapping of lowercased question keyword -> answer text from FAQPage JSON-LD.
+
+    Logs (but does not raise on) malformed JSON-LD blocks so a silently
+    corrupt page is visible in server logs instead of returning empty
+    sections that would overwrite live data downstream.
+    """
     for script in soup.find_all("script", type="application/ld+json"):
         try:
             payload = json.loads(script.string or "{}")
-        except (json.JSONDecodeError, TypeError):
+        except (json.JSONDecodeError, TypeError) as exc:
+            logger.warning("Pikalytics JSON-LD block failed to parse: %s", exc)
             continue
         if not isinstance(payload, dict) or payload.get("@type") != "FAQPage":
             continue
@@ -75,14 +85,12 @@ def _parse_faq_section(answers: dict[str, str], keyword: str) -> list[tuple[str,
         if keyword not in question:
             continue
         results: list[tuple[str, float]] = []
+        # The regex percentage group is a strict decimal, so float() cannot
+        # raise here — no silent swallow path is possible.
         for m in _FAQ_ENTRY_RE.finditer(_strip_faq_preamble(text)):
             name = m.group(1).strip()
-            try:
-                pct = float(m.group(2))
-            except ValueError:
-                continue
             if name:
-                results.append((name, pct))
+                results.append((name, float(m.group(2))))
         if results:
             return results
     return []
@@ -103,14 +111,12 @@ def parse_pikalytics_page(html: str, pokemon_slug: str) -> dict[str, Any] | None
     soup = BeautifulSoup(html, "html.parser")
 
     # --- Top-level usage percent from visible page text ---
+    # Regex matches a strict decimal, so float() cannot raise.
     usage_percent: float | None = None
     body_text = soup.get_text(" ", strip=True)
     m = _USAGE_RE.search(body_text)
     if m:
-        try:
-            usage_percent = float(m.group(1))
-        except ValueError:
-            pass
+        usage_percent = float(m.group(1))
 
     # --- Section data from FAQPage JSON-LD ---
     faq = _extract_faq_answers(soup)
@@ -195,7 +201,8 @@ async def store_champions_usage(
         (elo_cutoff,),
     )
     snapshot_id = cursor.lastrowid
-    assert snapshot_id is not None
+    if snapshot_id is None:
+        raise RuntimeError("INSERT INTO champions_usage_snapshots did not return lastrowid")
 
     count = 0
     for entry in pokemon_data:
@@ -212,7 +219,8 @@ async def store_champions_usage(
             ),
         )
         pu_id = poke_cursor.lastrowid
-        assert pu_id is not None
+        if pu_id is None:
+            raise RuntimeError("INSERT INTO champions_pokemon_usage did not return lastrowid")
 
         for move, pct in entry.get("moves", []):
             await db.execute(
