@@ -141,6 +141,66 @@ async def test_store_replaces_existing() -> None:
 
 
 @pytest.mark.asyncio
+async def test_store_refuses_empty_list_and_preserves_rows() -> None:
+    """Passing [] to store_champions_moves must not wipe existing rows.
+
+    Regression guard: earlier revisions unconditionally issued
+    `DELETE FROM champions_dex_moves` before INSERT, so a parser regression
+    (e.g. Serebii layout change) that returned [] would silently erase the
+    entire table.
+    """
+    async with aiosqlite.connect(":memory:") as db:
+        await db.executescript(SCHEMA)
+        await store_champions_moves(
+            db,
+            [
+                {
+                    "id": "ironhead",
+                    "name": "Iron Head",
+                    "type": "Steel",
+                    "category": "Physical",
+                    "base_power": 80,
+                    "accuracy": 100,
+                    "pp": 15,
+                    "priority": 0,
+                    "target": None,
+                    "description": None,
+                    "short_desc": None,
+                }
+            ],
+        )
+        with pytest.raises(ValueError, match="empty Champions moves list"):
+            await store_champions_moves(db, [])
+        async with db.execute("SELECT COUNT(*) FROM champions_dex_moves") as cursor:
+            (count,) = await cursor.fetchone()
+    assert count == 1, "existing rows must survive a refused empty store"
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_store_orchestrator_skips_empty_parser_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When the parser returns [], the orchestrator must not wipe the table."""
+    db_path = tmp_path / "serebii_empty.db"
+
+    async def fake_fetch(url: str, service: str) -> FetchResult[str]:
+        # HTML long enough to pass the length gate but with no tab table.
+        return FetchResult.ok("<html><body>" + "x" * 200 + "</body></html>")
+
+    monkeypatch.setattr(
+        "smogon_vgc_mcp.fetcher.champions_moves.fetch_text_resilient",
+        fake_fetch,
+    )
+
+    result = await fetch_and_store_champions_moves(db_path=db_path)
+
+    assert result["fetched"] == 0
+    assert result["stored"] == 0
+    assert result["errors"], "empty parse must be surfaced as an error"
+    assert any("preserved" in e["message"] for e in result["errors"])
+
+
+@pytest.mark.asyncio
 async def test_fetch_and_store_orchestrator_mocks_network(
     tmp_path: Path, fixture_html: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:

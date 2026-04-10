@@ -280,5 +280,3 @@ class ChampionsUsageSnapshot:
     elo_cutoff: str  # "0+", "1500+", "1630+", "1760+"
     source: str = "pikalytics"
     fetched_at: str | None = None
-
-

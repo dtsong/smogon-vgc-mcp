@@ -155,7 +155,11 @@ PIKALYTICS_POKEMON_SLUGS = [
     "kingambit",
 ]
 
-ELO_CUTOFFS = ["0+", "1500+", "1630+", "1760+"]
+# Only "0+" is currently supported. PIKALYTICS_URL_TEMPLATE does not encode
+# an ELO filter, so every non-"0+" cutoff would fetch and silently store the
+# same default data under a misleading label. Higher-ELO support will land
+# once the real cutoff query parameter is wired up against a live page.
+ELO_CUTOFFS = ["0+"]
 
 
 async def store_champions_usage(
@@ -170,7 +174,17 @@ async def store_champions_usage(
     Deletes any existing snapshot for this (source, elo_cutoff) so child
     rows are cleared via ON DELETE CASCADE, then inserts a fresh snapshot
     and its children. Returns (snapshot_id, pokemon_count).
+
+    Raises ValueError if pokemon_data is empty — we refuse to replace an
+    existing snapshot with nothing, since a parser regression or transient
+    Pikalytics outage would otherwise silently wipe the live data.
     """
+    if not pokemon_data:
+        raise ValueError(
+            "refusing to store empty Pikalytics snapshot "
+            f"(elo_cutoff={elo_cutoff!r}) — would delete existing data"
+        )
+
     await db.execute(
         "DELETE FROM champions_usage_snapshots WHERE source = 'pikalytics' AND elo_cutoff = ?",
         (elo_cutoff,),
@@ -289,15 +303,28 @@ async def fetch_and_store_pikalytics_champions(
 
     snapshot_id = 0
     stored = 0
-    async with get_connection(db_path) as db:
-        try:
-            snapshot_id, stored = await store_champions_usage(
-                db, elo_cutoff=elo_cutoff, pokemon_data=results, _commit=False
-            )
-            await db.commit()
-        except aiosqlite.Error as exc:
-            await db.rollback()
-            errors.append({"slug": "store", "message": str(exc)})
+    if not results:
+        # All per-slug fetches failed; skip the store entirely rather than
+        # wiping the existing snapshot with nothing.
+        errors.append(
+            {
+                "slug": "store",
+                "message": (
+                    "skipped: no Pikalytics pages parsed successfully "
+                    f"({len(errors)} fetch errors); existing snapshot preserved"
+                ),
+            }
+        )
+    else:
+        async with get_connection(db_path) as db:
+            try:
+                snapshot_id, stored = await store_champions_usage(
+                    db, elo_cutoff=elo_cutoff, pokemon_data=results, _commit=False
+                )
+                await db.commit()
+            except (aiosqlite.Error, ValueError) as exc:
+                await db.rollback()
+                errors.append({"slug": "store", "message": str(exc)})
 
     return {
         "fetched": len(results),

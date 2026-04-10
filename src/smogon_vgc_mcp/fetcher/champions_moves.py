@@ -170,7 +170,12 @@ async def store_champions_moves(
 
     DELETE + INSERT OR REPLACE pattern matching store_champions_pokemon_data.
     Returns count of stored rows.
+
+    Raises ValueError if moves is empty — a parser regression or Serebii
+    layout change would otherwise wipe the whole table with no warning.
     """
+    if not moves:
+        raise ValueError("refusing to store empty Champions moves list — would delete all rows")
     await db.execute("DELETE FROM champions_dex_moves")
     count = 0
     for m in moves:
@@ -239,13 +244,25 @@ async def fetch_and_store_champions_moves(
         }
 
     stored = 0
-    async with get_connection(db_path) as db:
-        try:
-            stored = await store_champions_moves(db, moves, _commit=False)
-            await db.commit()
-        except aiosqlite.Error as exc:
-            await db.rollback()
-            errors.append({"url": "store", "message": str(exc)})
+    if not moves:
+        # Parser returned nothing (empty page, layout change, or bad HTML).
+        # Never DELETE the existing rows in that case — preserve live data.
+        errors.append(
+            {
+                "url": SEREBII_MOVES_URL,
+                "message": (
+                    "skipped: parser returned 0 moves; existing champions_dex_moves rows preserved"
+                ),
+            }
+        )
+    else:
+        async with get_connection(db_path) as db:
+            try:
+                stored = await store_champions_moves(db, moves, _commit=False)
+                await db.commit()
+            except (aiosqlite.Error, ValueError) as exc:
+                await db.rollback()
+                errors.append({"url": "store", "message": str(exc)})
 
     return {
         "fetched": len(moves),

@@ -139,7 +139,7 @@ async def test_store_replaces_same_elo_snapshot() -> None:
                 "items": [],
                 "abilities": [],
                 "teammates": [],
-                }
+            }
         ]
         await store_champions_usage(db, elo_cutoff="0+", pokemon_data=first)
         second = [
@@ -152,7 +152,7 @@ async def test_store_replaces_same_elo_snapshot() -> None:
                 "items": [],
                 "abilities": [],
                 "teammates": [],
-                }
+            }
         ]
         await store_champions_usage(db, elo_cutoff="0+", pokemon_data=second)
         async with db.execute("SELECT COUNT(*) FROM champions_usage_snapshots") as cursor:
@@ -210,6 +210,105 @@ async def test_fetch_and_store_orchestrator_mocks_network(
 
 
 @pytest.mark.asyncio
+async def test_store_refuses_empty_list_and_preserves_snapshot() -> None:
+    """Passing [] to store_champions_usage must not wipe the existing snapshot.
+
+    Regression guard: a parser regression that returned an empty results list
+    would otherwise DELETE the live snapshot and replace it with an empty
+    one, causing silent data loss for the entire ELO bucket.
+    """
+    async with aiosqlite.connect(":memory:") as db:
+        await db.executescript(SCHEMA)
+        await db.execute("PRAGMA foreign_keys = ON")
+        seed = [
+            {
+                "pokemon": "incineroar",
+                "usage_percent": 35.8,
+                "rank": 1,
+                "raw_count": None,
+                "moves": [("Fake Out", 95.2)],
+                "items": [],
+                "abilities": [],
+                "teammates": [],
+            }
+        ]
+        await store_champions_usage(db, elo_cutoff="0+", pokemon_data=seed)
+        with pytest.raises(ValueError, match="empty Pikalytics snapshot"):
+            await store_champions_usage(db, elo_cutoff="0+", pokemon_data=[])
+        async with db.execute("SELECT COUNT(*) FROM champions_usage_snapshots") as cursor:
+            (snap_count,) = await cursor.fetchone()
+        async with db.execute("SELECT move FROM champions_usage_moves") as cursor:
+            moves = await cursor.fetchall()
+    assert snap_count == 1, "original snapshot must survive a refused empty store"
+    assert moves == [("Fake Out",)], "child rows must be untouched"
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_store_orchestrator_preserves_data_when_all_fetches_fail(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When every per-slug fetch fails, the orchestrator must NOT enter
+    store_champions_usage — the existing snapshot must survive intact."""
+    from smogon_vgc_mcp.resilience.errors import ErrorCategory
+
+    db_path = tmp_path / "preserve.db"
+
+    # Seed an existing snapshot via the real store path.
+    async with aiosqlite.connect(db_path) as db:
+        await db.executescript(SCHEMA)
+        await db.execute("PRAGMA foreign_keys = ON")
+        await store_champions_usage(
+            db,
+            elo_cutoff="0+",
+            pokemon_data=[
+                {
+                    "pokemon": "incineroar",
+                    "usage_percent": 35.8,
+                    "rank": 1,
+                    "raw_count": None,
+                    "moves": [("Fake Out", 95.2)],
+                    "items": [],
+                    "abilities": [],
+                    "teammates": [],
+                }
+            ],
+        )
+
+    async def fake_fetch(url: str, service: str) -> FetchResult[str]:
+        return FetchResult.fail(
+            ServiceError(
+                category=ErrorCategory.NETWORK,
+                service="pikalytics",
+                message="simulated total outage",
+            )
+        )
+
+    monkeypatch.setattr(
+        "smogon_vgc_mcp.fetcher.pikalytics_champions.fetch_text_resilient",
+        fake_fetch,
+    )
+
+    result = await fetch_and_store_pikalytics_champions(
+        db_path=db_path,
+        elo_cutoff="0+",
+        slugs=["incineroar", "sneasler"],
+        request_delay=0.0,
+    )
+
+    assert result["fetched"] == 0
+    assert result["stored"] == 0
+    assert any("preserved" in e["message"] for e in result["errors"])
+
+    async with aiosqlite.connect(db_path) as db:
+        async with db.execute("SELECT COUNT(*) FROM champions_usage_snapshots") as cursor:
+            (snap_count,) = await cursor.fetchone()
+        async with db.execute("SELECT move FROM champions_usage_moves") as cursor:
+            moves = await cursor.fetchall()
+    assert snap_count == 1, "seed snapshot must still exist"
+    assert moves == [("Fake Out",)], "seed child rows must still exist"
+
+
+@pytest.mark.asyncio
 async def test_fetch_and_store_orchestrator_records_fetch_errors(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -241,5 +340,8 @@ async def test_fetch_and_store_orchestrator_records_fetch_errors(
 
     assert result["fetched"] == 0
     assert result["stored"] == 0
-    assert len(result["errors"]) == 2
-    assert all("simulated network failure" in e["message"] for e in result["errors"])
+    # Two per-slug fetch errors plus one "skipped store" entry from the
+    # data-loss guard that refuses to wipe the snapshot with nothing.
+    fetch_errors = [e for e in result["errors"] if e["slug"] != "store"]
+    assert len(fetch_errors) == 2
+    assert all("simulated network failure" in e["message"] for e in fetch_errors)
