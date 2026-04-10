@@ -265,3 +265,33 @@ class ChampionsDexMove:
     target: str | None = None
     description: str | None = None
     short_desc: str | None = None
+
+
+# =============================================================================
+# Champions usage data models (from Pikalytics)
+# =============================================================================
+
+
+@dataclass
+class ChampionsUsageSnapshot:
+    """A single Pikalytics Champions usage snapshot for one ELO cutoff."""
+
+    id: int
+    elo_cutoff: str  # "0+", "1500+", "1630+", "1760+"
+    source: str = "pikalytics"
+    fetched_at: str | None = None
+
+
+@dataclass
+class ChampionsPokemonUsage:
+    """Per-Pokemon usage row for a Champions snapshot."""
+
+    pokemon: str
+    usage_percent: float | None = None
+    rank: int | None = None
+    raw_count: int | None = None
+    moves: list[tuple[str, float]] = field(default_factory=list)
+    items: list[tuple[str, float]] = field(default_factory=list)
+    abilities: list[tuple[str, float]] = field(default_factory=list)
+    teammates: list[tuple[str, float]] = field(default_factory=list)
+    spreads: list[dict] = field(default_factory=list)

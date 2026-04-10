@@ -334,6 +334,76 @@ CREATE INDEX IF NOT EXISTS idx_champ_pokemon_is_mega ON champions_dex_pokemon(is
 CREATE INDEX IF NOT EXISTS idx_champ_moves_type ON champions_dex_moves(type);
 CREATE INDEX IF NOT EXISTS idx_champ_moves_category ON champions_dex_moves(category);
 CREATE INDEX IF NOT EXISTS idx_champ_abilities_name ON champions_dex_abilities(name);
+
+-- =============================================================================
+-- Champions usage data (from Pikalytics)
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS champions_usage_snapshots (
+    id INTEGER PRIMARY KEY,
+    elo_cutoff TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'pikalytics',
+    fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(source, elo_cutoff)
+);
+
+CREATE TABLE IF NOT EXISTS champions_pokemon_usage (
+    id INTEGER PRIMARY KEY,
+    snapshot_id INTEGER REFERENCES champions_usage_snapshots(id) ON DELETE CASCADE,
+    pokemon TEXT NOT NULL,
+    usage_percent REAL,
+    rank INTEGER,
+    raw_count INTEGER,
+    UNIQUE(snapshot_id, pokemon)
+);
+
+CREATE TABLE IF NOT EXISTS champions_usage_moves (
+    id INTEGER PRIMARY KEY,
+    pokemon_usage_id INTEGER REFERENCES champions_pokemon_usage(id) ON DELETE CASCADE,
+    move TEXT NOT NULL,
+    percent REAL
+);
+
+CREATE TABLE IF NOT EXISTS champions_usage_items (
+    id INTEGER PRIMARY KEY,
+    pokemon_usage_id INTEGER REFERENCES champions_pokemon_usage(id) ON DELETE CASCADE,
+    item TEXT NOT NULL,
+    percent REAL
+);
+
+CREATE TABLE IF NOT EXISTS champions_usage_abilities (
+    id INTEGER PRIMARY KEY,
+    pokemon_usage_id INTEGER REFERENCES champions_pokemon_usage(id) ON DELETE CASCADE,
+    ability TEXT NOT NULL,
+    percent REAL
+);
+
+CREATE TABLE IF NOT EXISTS champions_usage_teammates (
+    id INTEGER PRIMARY KEY,
+    pokemon_usage_id INTEGER REFERENCES champions_pokemon_usage(id) ON DELETE CASCADE,
+    teammate TEXT NOT NULL,
+    percent REAL
+);
+
+CREATE TABLE IF NOT EXISTS champions_usage_spreads (
+    id INTEGER PRIMARY KEY,
+    pokemon_usage_id INTEGER REFERENCES champions_pokemon_usage(id) ON DELETE CASCADE,
+    nature TEXT,
+    hp INTEGER,
+    atk INTEGER,
+    def INTEGER,
+    spa INTEGER,
+    spd INTEGER,
+    spe INTEGER,
+    percent REAL
+);
+
+CREATE INDEX IF NOT EXISTS idx_champ_usage_snap_elo
+    ON champions_usage_snapshots(elo_cutoff);
+CREATE INDEX IF NOT EXISTS idx_champ_pokemon_usage_name
+    ON champions_pokemon_usage(pokemon);
+CREATE INDEX IF NOT EXISTS idx_champ_pokemon_usage_snap
+    ON champions_pokemon_usage(snapshot_id);
 """
 
 
