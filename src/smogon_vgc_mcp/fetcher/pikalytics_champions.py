@@ -19,9 +19,8 @@ from typing import Any
 from bs4 import BeautifulSoup
 
 # Matches "Label Name (41.092%)" patterns in FAQ answer text
-_FAQ_ENTRY_RE = re.compile(r"([A-Za-z][\w\s\-'.]+?)\s*\(([\d.]+)%\)")
+_FAQ_ENTRY_RE = re.compile(r"([A-Za-z][^(]+?)\s*\(([\d.]+)%\)")
 _USAGE_RE = re.compile(r"Usage\s+Percent\s+([\d.]+)\s*%", re.I)
-_PERCENT_RE = re.compile(r"([\d.]+)\s*%")
 
 
 def _extract_faq_answers(soup: BeautifulSoup) -> dict[str, str]:
@@ -73,7 +72,7 @@ def parse_pikalytics_page(html: str, pokemon_slug: str) -> dict[str, Any] | None
     """
     if not html or len(html.strip()) < 200:
         return None
-    if "Not Found" in html[:500] or "404" in html[:200]:
+    if "Not Found" in html[:500]:
         return None
 
     soup = BeautifulSoup(html, "html.parser")

@@ -18,7 +18,8 @@ def test_parse_returns_usage_dict(html: str) -> None:
     result = parse_pikalytics_page(html, pokemon_slug="incineroar")
     assert result is not None
     assert result["pokemon"] == "incineroar"
-    assert "usage_percent" in result or "rank" in result
+    assert result["usage_percent"] is not None
+    assert 0 < result["usage_percent"] <= 100
 
 
 def test_parse_extracts_moves(html: str) -> None:
@@ -34,9 +35,9 @@ def test_parse_extracts_moves(html: str) -> None:
 def test_parse_extracts_items_abilities_teammates(html: str) -> None:
     result = parse_pikalytics_page(html, pokemon_slug="incineroar")
     assert result is not None
-    assert isinstance(result["items"], list)
-    assert isinstance(result["abilities"], list)
-    assert isinstance(result["teammates"], list)
+    assert len(result["items"]) > 0
+    assert len(result["abilities"]) > 0
+    assert len(result["teammates"]) > 0
 
 
 def test_parse_handles_404() -> None:
