@@ -243,7 +243,7 @@ async def fetch_and_store_champions_moves(
         try:
             stored = await store_champions_moves(db, moves, _commit=False)
             await db.commit()
-        except Exception as exc:
+        except aiosqlite.Error as exc:
             await db.rollback()
             errors.append({"url": "store", "message": str(exc)})
 

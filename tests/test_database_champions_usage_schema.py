@@ -12,7 +12,6 @@ EXPECTED_TABLES = {
     "champions_usage_items",
     "champions_usage_abilities",
     "champions_usage_teammates",
-    "champions_usage_spreads",
 }
 
 

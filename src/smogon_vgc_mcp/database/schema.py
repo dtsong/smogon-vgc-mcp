@@ -391,19 +391,6 @@ CREATE TABLE IF NOT EXISTS champions_usage_teammates (
     percent REAL
 );
 
-CREATE TABLE IF NOT EXISTS champions_usage_spreads (
-    id INTEGER PRIMARY KEY,
-    pokemon_usage_id INTEGER REFERENCES champions_pokemon_usage(id) ON DELETE CASCADE,
-    nature TEXT,
-    hp INTEGER,
-    atk INTEGER,
-    def INTEGER,
-    spa INTEGER,
-    spd INTEGER,
-    spe INTEGER,
-    percent REAL
-);
-
 CREATE INDEX IF NOT EXISTS idx_champ_usage_snap_elo
     ON champions_usage_snapshots(elo_cutoff);
 CREATE INDEX IF NOT EXISTS idx_champ_pokemon_usage_name

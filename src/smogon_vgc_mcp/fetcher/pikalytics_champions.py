@@ -93,7 +93,7 @@ def parse_pikalytics_page(html: str, pokemon_slug: str) -> dict[str, Any] | None
 
     Returns None for empty or 404-style pages.  Returned dict has keys:
       pokemon, usage_percent, rank, raw_count,
-      moves, items, abilities, teammates, spreads
+      moves, items, abilities, teammates
     """
     if not html or len(html.strip()) < 200:
         return None
@@ -132,7 +132,6 @@ def parse_pikalytics_page(html: str, pokemon_slug: str) -> dict[str, Any] | None
         "items": items,
         "abilities": abilities,
         "teammates": teammates,
-        "spreads": [],
     }
 
 

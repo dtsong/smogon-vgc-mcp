@@ -26,7 +26,6 @@ async def _seed(db: aiosqlite.Connection) -> None:
                 "items": [("Safety Goggles", 40.0)],
                 "abilities": [("Intimidate", 100.0)],
                 "teammates": [("Farigiraf", 22.0)],
-                "spreads": [],
             }
         ],
     )

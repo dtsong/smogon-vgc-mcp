@@ -7,9 +7,11 @@ import pytest
 
 from smogon_vgc_mcp.database.schema import SCHEMA
 from smogon_vgc_mcp.fetcher.pikalytics_champions import (
+    fetch_and_store_pikalytics_champions,
     parse_pikalytics_page,
     store_champions_usage,
 )
+from smogon_vgc_mcp.resilience.errors import FetchResult, ServiceError
 
 FIXTURE = Path(__file__).parent / "fixtures" / "pikalytics_incineroar.html"
 
@@ -100,7 +102,6 @@ async def test_store_creates_snapshot_and_rows() -> None:
             "items": [("Safety Goggles", 40.0)],
             "abilities": [("Intimidate", 100.0)],
             "teammates": [("Farigiraf", 22.0)],
-            "spreads": [],
         }
     ]
     async with aiosqlite.connect(":memory:") as db:
@@ -138,8 +139,7 @@ async def test_store_replaces_same_elo_snapshot() -> None:
                 "items": [],
                 "abilities": [],
                 "teammates": [],
-                "spreads": [],
-            }
+                }
         ]
         await store_champions_usage(db, elo_cutoff="0+", pokemon_data=first)
         second = [
@@ -152,8 +152,7 @@ async def test_store_replaces_same_elo_snapshot() -> None:
                 "items": [],
                 "abilities": [],
                 "teammates": [],
-                "spreads": [],
-            }
+                }
         ]
         await store_champions_usage(db, elo_cutoff="0+", pokemon_data=second)
         async with db.execute("SELECT COUNT(*) FROM champions_usage_snapshots") as cursor:
@@ -162,3 +161,85 @@ async def test_store_replaces_same_elo_snapshot() -> None:
             rows = await cursor.fetchall()
     assert snap_count == 1
     assert rows == [("B", 20.0)]
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_store_orchestrator_mocks_network(
+    tmp_path: Path, html: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Orchestrator fetches, parses, and persists a snapshot end-to-end.
+
+    Mocks fetch_text_resilient so the pipeline runs against the real fixture
+    HTML without touching the network, then verifies the SQLite DB contains
+    both the snapshot row and distribution children.
+    """
+    db_path = tmp_path / "orchestrator.db"
+
+    async def fake_fetch(url: str, service: str) -> FetchResult[str]:
+        return FetchResult.ok(html)
+
+    monkeypatch.setattr(
+        "smogon_vgc_mcp.fetcher.pikalytics_champions.fetch_text_resilient",
+        fake_fetch,
+    )
+
+    result = await fetch_and_store_pikalytics_champions(
+        db_path=db_path,
+        elo_cutoff="0+",
+        slugs=["incineroar"],
+        request_delay=0.0,
+    )
+
+    assert result["fetched"] == 1
+    assert result["stored"] == 1
+    assert result["errors"] == []
+    assert result["snapshot_id"] > 0
+    assert result["elo_cutoff"] == "0+"
+
+    async with aiosqlite.connect(db_path) as db:
+        async with db.execute("SELECT COUNT(*) FROM champions_usage_snapshots") as c:
+            (snap_count,) = await c.fetchone()
+        async with db.execute("SELECT COUNT(*) FROM champions_pokemon_usage") as c:
+            (poke_count,) = await c.fetchone()
+        async with db.execute("SELECT COUNT(*) FROM champions_usage_moves") as c:
+            (moves_count,) = await c.fetchone()
+
+    assert snap_count == 1
+    assert poke_count == 1
+    assert moves_count > 0
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_store_orchestrator_records_fetch_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Failed fetches are recorded in errors[] without aborting the run."""
+    from smogon_vgc_mcp.resilience.errors import ErrorCategory
+
+    db_path = tmp_path / "orchestrator_fail.db"
+
+    async def fake_fetch(url: str, service: str) -> FetchResult[str]:
+        return FetchResult.fail(
+            ServiceError(
+                category=ErrorCategory.NETWORK,
+                service="pikalytics",
+                message="simulated network failure",
+            )
+        )
+
+    monkeypatch.setattr(
+        "smogon_vgc_mcp.fetcher.pikalytics_champions.fetch_text_resilient",
+        fake_fetch,
+    )
+
+    result = await fetch_and_store_pikalytics_champions(
+        db_path=db_path,
+        elo_cutoff="0+",
+        slugs=["incineroar", "sneasler"],
+        request_delay=0.0,
+    )
+
+    assert result["fetched"] == 0
+    assert result["stored"] == 0
+    assert len(result["errors"]) == 2
+    assert all("simulated network failure" in e["message"] for e in result["errors"])

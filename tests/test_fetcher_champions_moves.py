@@ -7,8 +7,14 @@ import pytest
 
 from smogon_vgc_mcp.database.schema import SCHEMA
 from smogon_vgc_mcp.fetcher.champions_moves import (
+    fetch_and_store_champions_moves,
     parse_serebii_moves_page,
     store_champions_moves,
+)
+from smogon_vgc_mcp.resilience.errors import (
+    ErrorCategory,
+    FetchResult,
+    ServiceError,
 )
 
 FIXTURE = Path(__file__).parent / "fixtures" / "serebii_champions_moves.html"
@@ -132,3 +138,60 @@ async def test_store_replaces_existing() -> None:
         ) as cursor:
             row = await cursor.fetchone()
     assert row == (1, 75)
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_store_orchestrator_mocks_network(
+    tmp_path: Path, fixture_html: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Orchestrator fetches, parses, and persists Serebii moves end-to-end."""
+    db_path = tmp_path / "serebii.db"
+
+    async def fake_fetch(url: str, service: str) -> FetchResult[str]:
+        return FetchResult.ok(fixture_html)
+
+    monkeypatch.setattr(
+        "smogon_vgc_mcp.fetcher.champions_moves.fetch_text_resilient",
+        fake_fetch,
+    )
+
+    result = await fetch_and_store_champions_moves(db_path=db_path)
+
+    assert result["fetched"] > 0
+    assert result["stored"] == result["fetched"]
+    assert result["errors"] == []
+    assert result["dry_run"] is False
+
+    async with aiosqlite.connect(db_path) as db:
+        async with db.execute("SELECT COUNT(*) FROM champions_dex_moves") as cursor:
+            (count,) = await cursor.fetchone()
+    assert count == result["stored"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_store_orchestrator_records_fetch_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fetch failure short-circuits with an error entry, no DB writes."""
+    db_path = tmp_path / "serebii_fail.db"
+
+    async def fake_fetch(url: str, service: str) -> FetchResult[str]:
+        return FetchResult.fail(
+            ServiceError(
+                category=ErrorCategory.NETWORK,
+                service="serebii",
+                message="down",
+            )
+        )
+
+    monkeypatch.setattr(
+        "smogon_vgc_mcp.fetcher.champions_moves.fetch_text_resilient",
+        fake_fetch,
+    )
+
+    result = await fetch_and_store_champions_moves(db_path=db_path)
+
+    assert result["fetched"] == 0
+    assert result["stored"] == 0
+    assert len(result["errors"]) == 1
+    assert result["errors"][0]["message"] == "Fetch failed"
