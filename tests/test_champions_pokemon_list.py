@@ -1,6 +1,5 @@
 """Tests for fetcher/champions_pokemon_list.py — static Champions Pokemon list."""
 
-import pytest
 
 from smogon_vgc_mcp.fetcher.champions_pokemon_list import (
     ALL_POKEMON,

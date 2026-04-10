@@ -7,8 +7,8 @@ import aiosqlite
 
 from smogon_vgc_mcp.database.models import (
     AbilityUsage,
-    CheckCounter,
     ChampionsDexPokemon,
+    CheckCounter,
     DexAbility,
     DexItem,
     DexMove,

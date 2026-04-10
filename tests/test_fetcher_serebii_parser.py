@@ -1,9 +1,7 @@
 """Tests for fetcher/champions_dex.py — Serebii Champions HTML parser."""
 
-import pytest
 
 from smogon_vgc_mcp.fetcher.champions_dex import parse_serebii_pokemon_page
-
 
 # ---------------------------------------------------------------------------
 # HTML fixtures: minimal but realistic fragments modelled after the real
