@@ -16,6 +16,9 @@ package-lock.json
 # Generated data
 /data/
 
+# Git worktrees
+.worktrees/
+
 # Local agent / workflow state
 .claire/
 .claude/council/sessions/
