@@ -7,8 +7,9 @@ import aiosqlite
 
 from smogon_vgc_mcp.database.models import (
     AbilityUsage,
-    CheckCounter,
+    ChampionsDexMove,
     ChampionsDexPokemon,
+    CheckCounter,
     DexAbility,
     DexItem,
     DexMove,
@@ -1504,3 +1505,69 @@ async def search_champions_pokemon_by_type(
         ) as cursor:
             rows = await cursor.fetchall()
     return [_row_to_champions_pokemon(r) for r in rows]
+
+
+# Champions moves queries
+
+
+async def get_champions_move(
+    move_id: str,
+    db_path: Path | None = None,
+) -> ChampionsDexMove | None:
+    """Look up a single Champions move by normalized id (e.g. 'dragonclaw')."""
+    async with get_connection(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT id, num, name, type, category, base_power, accuracy,
+                      pp, priority, target, description, short_desc
+               FROM champions_dex_moves WHERE id = ?""",
+            (move_id,),
+        ) as cursor:
+            row = await cursor.fetchone()
+    if row is None:
+        return None
+    return ChampionsDexMove(
+        id=row["id"],
+        num=row["num"] or 0,
+        name=row["name"],
+        type=row["type"],
+        category=row["category"],
+        base_power=row["base_power"],
+        accuracy=row["accuracy"],
+        pp=row["pp"] or 0,
+        priority=row["priority"] or 0,
+        target=row["target"],
+        description=row["description"],
+        short_desc=row["short_desc"],
+    )
+
+
+async def list_champions_moves(
+    db_path: Path | None = None,
+) -> list[ChampionsDexMove]:
+    """Return all Champions moves, ordered by name."""
+    async with get_connection(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT id, num, name, type, category, base_power, accuracy,
+                      pp, priority, target, description, short_desc
+               FROM champions_dex_moves ORDER BY name"""
+        ) as cursor:
+            rows = await cursor.fetchall()
+    return [
+        ChampionsDexMove(
+            id=r["id"],
+            num=r["num"] or 0,
+            name=r["name"],
+            type=r["type"],
+            category=r["category"],
+            base_power=r["base_power"],
+            accuracy=r["accuracy"],
+            pp=r["pp"] or 0,
+            priority=r["priority"] or 0,
+            target=r["target"],
+            description=r["description"],
+            short_desc=r["short_desc"],
+        )
+        for r in rows
+    ]

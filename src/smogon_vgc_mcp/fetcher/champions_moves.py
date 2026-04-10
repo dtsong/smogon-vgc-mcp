@@ -20,8 +20,16 @@ Only Champions-game values are extracted; S/V rows are ignored.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
+import aiosqlite
 from bs4 import BeautifulSoup, Tag
+
+from smogon_vgc_mcp.database.schema import get_connection, get_db_path, init_database
+from smogon_vgc_mcp.resilience import get_all_circuit_states
+from smogon_vgc_mcp.utils import fetch_text_resilient
+
+SEREBII_MOVES_URL = "https://www.serebii.net/pokemonchampions/updatedattacks.shtml"
 
 # Maps category image filename stem to canonical category string.
 _CATEGORY_MAP: dict[str, str] = {
@@ -150,3 +158,99 @@ def parse_serebii_moves_page(html: str) -> list[dict]:
         )
 
     return moves
+
+
+async def store_champions_moves(
+    db: aiosqlite.Connection,
+    moves: list[dict],
+    *,
+    _commit: bool = True,
+) -> int:
+    """Replace all Champions moves with the provided list.
+
+    DELETE + INSERT OR REPLACE pattern matching store_champions_pokemon_data.
+    Returns count of stored rows.
+    """
+    await db.execute("DELETE FROM champions_dex_moves")
+    count = 0
+    for m in moves:
+        await db.execute(
+            """INSERT OR REPLACE INTO champions_dex_moves
+               (id, num, name, type, category, base_power, accuracy, pp,
+                priority, target, description, short_desc)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                m["id"],
+                m.get("num"),
+                m["name"],
+                m["type"],
+                m["category"],
+                m.get("base_power"),
+                m.get("accuracy"),
+                m.get("pp", 0),
+                m.get("priority", 0),
+                m.get("target"),
+                m.get("description"),
+                m.get("short_desc"),
+            ),
+        )
+        count += 1
+    if _commit:
+        await db.commit()
+    return count
+
+
+async def fetch_and_store_champions_moves(
+    db_path: Path | None = None,
+    *,
+    dry_run: bool = False,
+) -> dict:
+    """Fetch the Serebii updated attacks page and store parsed moves.
+
+    Returns dict: {fetched, stored, errors, circuit_states, dry_run}.
+    """
+    if db_path is None:
+        db_path = get_db_path()
+
+    await init_database(db_path)
+
+    result = await fetch_text_resilient(SEREBII_MOVES_URL, service="serebii")
+    errors: list[dict] = []
+    if not result.success or not result.data:
+        errors.append({"url": SEREBII_MOVES_URL, "message": "Fetch failed"})
+        return {
+            "fetched": 0,
+            "stored": 0,
+            "errors": errors,
+            "circuit_states": get_all_circuit_states(),
+            "dry_run": dry_run,
+        }
+
+    moves = parse_serebii_moves_page(result.data)
+
+    if dry_run:
+        return {
+            "fetched": len(moves),
+            "stored": 0,
+            "errors": errors,
+            "circuit_states": get_all_circuit_states(),
+            "dry_run": True,
+            "results": moves,
+        }
+
+    stored = 0
+    async with get_connection(db_path) as db:
+        try:
+            stored = await store_champions_moves(db, moves, _commit=False)
+            await db.commit()
+        except Exception as exc:
+            await db.rollback()
+            errors.append({"url": "store", "message": str(exc)})
+
+    return {
+        "fetched": len(moves),
+        "stored": stored,
+        "errors": errors,
+        "circuit_states": get_all_circuit_states(),
+        "dry_run": False,
+    }
