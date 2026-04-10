@@ -214,13 +214,21 @@ async def store_champions_usage(
     return snapshot_id, count
 
 
-async def fetch_pikalytics_pokemon(slug: str) -> dict | None:
-    """Fetch a single Pokemon page from Pikalytics and parse it."""
+async def fetch_pikalytics_pokemon(slug: str) -> tuple[dict | None, str | None]:
+    """Fetch a single Pokemon page from Pikalytics and parse it.
+
+    Returns (parsed_data, error_message). On success, error_message is None.
+    On failure, parsed_data is None and error_message describes why.
+    """
     url = PIKALYTICS_URL_TEMPLATE.format(slug=slug)
     result = await fetch_text_resilient(url, service="pikalytics")
     if not result.success or not result.data:
-        return None
-    return parse_pikalytics_page(result.data, pokemon_slug=slug)
+        err = result.error.message if result.error else "fetch returned no data"
+        return None, err
+    parsed = parse_pikalytics_page(result.data, pokemon_slug=slug)
+    if parsed is None:
+        return None, "parser returned None (404 or unparseable page)"
+    return parsed, None
 
 
 async def fetch_and_store_pikalytics_champions(
@@ -244,9 +252,9 @@ async def fetch_and_store_pikalytics_champions(
     results: list[dict] = []
 
     for slug in target_slugs:
-        data = await fetch_pikalytics_pokemon(slug)
+        data, err = await fetch_pikalytics_pokemon(slug)
         if data is None:
-            errors.append({"slug": slug, "message": "Failed to fetch or parse page"})
+            errors.append({"slug": slug, "message": err or "unknown error"})
         else:
             results.append(data)
         if request_delay > 0:
@@ -270,7 +278,7 @@ async def fetch_and_store_pikalytics_champions(
                 db, elo_cutoff=elo_cutoff, pokemon_data=results, _commit=False
             )
             await db.commit()
-        except Exception as exc:
+        except aiosqlite.Error as exc:
             await db.rollback()
             errors.append({"slug": "store", "message": str(exc)})
 

@@ -75,8 +75,14 @@ async def test_store_creates_snapshot_and_rows() -> None:
             (moves_count,) = await cursor.fetchone()
         async with db.execute("SELECT COUNT(*) FROM champions_usage_abilities") as cursor:
             (ab_count,) = await cursor.fetchone()
+        async with db.execute("SELECT COUNT(*) FROM champions_usage_items") as cursor:
+            (items_count,) = await cursor.fetchone()
+        async with db.execute("SELECT COUNT(*) FROM champions_usage_teammates") as cursor:
+            (teammates_count,) = await cursor.fetchone()
     assert moves_count == 2
     assert ab_count == 1
+    assert items_count == 1
+    assert teammates_count == 1
 
 
 @pytest.mark.asyncio

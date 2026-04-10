@@ -456,14 +456,39 @@ async def init_database(db_path: Path | None = None) -> None:
         await db.commit()
 
 
-def get_connection(db_path: Path | None = None) -> aiosqlite.Connection:
+async def _enable_foreign_keys(db: aiosqlite.Connection) -> None:
+    """Enable foreign key enforcement for a connection."""
+    await db.execute("PRAGMA foreign_keys = ON")
+
+
+class _ForeignKeysConnection:
+    """Async context manager that wraps aiosqlite.connect and enables foreign keys."""
+
+    def __init__(self, db_path: Path) -> None:
+        self._db_path = db_path
+        self._conn: aiosqlite.Connection | None = None
+
+    async def __aenter__(self) -> aiosqlite.Connection:
+        self._conn = await aiosqlite.connect(self._db_path, timeout=DB_TIMEOUT)
+        await _enable_foreign_keys(self._conn)
+        return self._conn
+
+    async def __aexit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
+        if self._conn is not None:
+            await self._conn.close()
+
+
+def get_connection(db_path: Path | None = None) -> _ForeignKeysConnection:
     """Get a database connection context manager.
 
     Usage:
         async with get_connection() as db:
             ...
+
+    Foreign keys are enabled (PRAGMA foreign_keys = ON) on every connection so
+    that ON DELETE CASCADE constraints are enforced in production.
     """
     if db_path is None:
         db_path = get_db_path()
 
-    return aiosqlite.connect(db_path, timeout=DB_TIMEOUT)
+    return _ForeignKeysConnection(db_path)
