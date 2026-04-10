@@ -187,7 +187,7 @@ async def store_champions_moves(
                 m["category"],
                 m.get("base_power"),
                 m.get("accuracy"),
-                m.get("pp", 0),
+                m.get("pp"),
                 m.get("priority", 0),
                 m.get("target"),
                 m.get("description"),

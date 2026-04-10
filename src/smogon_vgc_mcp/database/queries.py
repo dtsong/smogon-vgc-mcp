@@ -1510,22 +1510,8 @@ async def search_champions_pokemon_by_type(
 # Champions moves queries
 
 
-async def get_champions_move(
-    move_id: str,
-    db_path: Path | None = None,
-) -> ChampionsDexMove | None:
-    """Look up a single Champions move by normalized id (e.g. 'dragonclaw')."""
-    async with get_connection(db_path) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            """SELECT id, num, name, type, category, base_power, accuracy,
-                      pp, priority, target, description, short_desc
-               FROM champions_dex_moves WHERE id = ?""",
-            (move_id,),
-        ) as cursor:
-            row = await cursor.fetchone()
-    if row is None:
-        return None
+def _row_to_champions_move(row: aiosqlite.Row) -> ChampionsDexMove:
+    """Convert a DB row to a ChampionsDexMove dataclass."""
     return ChampionsDexMove(
         id=row["id"],
         num=row["num"] or 0,
@@ -1542,6 +1528,23 @@ async def get_champions_move(
     )
 
 
+async def get_champions_move(
+    move_id: str,
+    db_path: Path | None = None,
+) -> ChampionsDexMove | None:
+    """Look up a single Champions move by normalized id (e.g. 'dragonclaw')."""
+    async with get_connection(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT id, num, name, type, category, base_power, accuracy,
+                      pp, priority, target, description, short_desc
+               FROM champions_dex_moves WHERE id = ?""",
+            (move_id,),
+        ) as cursor:
+            row = await cursor.fetchone()
+    return _row_to_champions_move(row) if row else None
+
+
 async def list_champions_moves(
     db_path: Path | None = None,
 ) -> list[ChampionsDexMove]:
@@ -1554,20 +1557,4 @@ async def list_champions_moves(
                FROM champions_dex_moves ORDER BY name"""
         ) as cursor:
             rows = await cursor.fetchall()
-    return [
-        ChampionsDexMove(
-            id=r["id"],
-            num=r["num"] or 0,
-            name=r["name"],
-            type=r["type"],
-            category=r["category"],
-            base_power=r["base_power"],
-            accuracy=r["accuracy"],
-            pp=r["pp"] or 0,
-            priority=r["priority"] or 0,
-            target=r["target"],
-            description=r["description"],
-            short_desc=r["short_desc"],
-        )
-        for r in rows
-    ]
+    return [_row_to_champions_move(r) for r in rows]
