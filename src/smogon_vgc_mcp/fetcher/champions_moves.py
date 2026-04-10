@@ -71,6 +71,7 @@ def _category_from_img(td: Tag) -> str | None:
     if not img:
         return None
     src = (img.get("src") or "").lower()
+    # Serebii serves category icons (physical/special/other) from the same /type/ path as types.
     m = _TYPE_SRC_RE.search(src)
     if not m:
         return None
@@ -88,11 +89,12 @@ def parse_serebii_moves_page(html: str) -> list[dict]:
       category     – "Physical" | "Special" | "Status"
       base_power   – int or None for status moves
       accuracy     – int or None for moves that always hit
-      pp           – int (0 if unparseable)
+      pp           – int or None if unparseable
       priority     – always 0 (not on this page)
       target       – always None (not on this page)
       description  – effect text or None
-      short_desc   – same as description
+      short_desc   – same as description (Serebii provides one text;
+                     mirrored for schema parity with ChampionsDexMove)
 
     Returns an empty list for empty or malformed HTML.
     """
@@ -126,7 +128,7 @@ def parse_serebii_moves_page(html: str) -> list[dict]:
         if move_type is None or category is None:
             continue
 
-        pp = _parse_int_or_none(cells[4].get_text(strip=True)) or 0
+        pp = _parse_int_or_none(cells[4].get_text(strip=True))
         base_power = _parse_int_or_none(cells[5].get_text(strip=True))
         accuracy = _parse_int_or_none(cells[6].get_text(strip=True))
         description = cells[7].get_text(" ", strip=True) or None
