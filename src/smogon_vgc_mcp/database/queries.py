@@ -1558,3 +1558,56 @@ async def list_champions_moves(
         ) as cursor:
             rows = await cursor.fetchall()
     return [_row_to_champions_move(r) for r in rows]
+
+
+async def get_champions_usage(
+    pokemon: str,
+    elo_cutoff: str = "0+",
+    db_path: Path | None = None,
+) -> dict | None:
+    """Return the latest Pikalytics usage payload for a Pokemon + ELO cutoff.
+
+    Returns None if no snapshot exists or the Pokemon is absent.
+    """
+    async with get_connection(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT pu.id, pu.pokemon, pu.usage_percent, pu.rank, pu.raw_count
+               FROM champions_pokemon_usage pu
+               JOIN champions_usage_snapshots s ON s.id = pu.snapshot_id
+               WHERE s.source = 'pikalytics'
+                 AND s.elo_cutoff = ?
+                 AND pu.pokemon = ?
+               ORDER BY s.fetched_at DESC
+               LIMIT 1""",
+            (elo_cutoff, pokemon),
+        ) as cursor:
+            header = await cursor.fetchone()
+        if header is None:
+            return None
+        pu_id = header["id"]
+
+        async def _rows(table: str, col: str) -> list[tuple[str, float]]:
+            sql = (
+                f"SELECT {col}, percent FROM {table}"
+                " WHERE pokemon_usage_id = ? ORDER BY percent DESC"
+            )
+            async with db.execute(sql, (pu_id,)) as c:
+                return [(r[0], r[1]) async for r in c]
+
+        moves = await _rows("champions_usage_moves", "move")
+        items = await _rows("champions_usage_items", "item")
+        abilities = await _rows("champions_usage_abilities", "ability")
+        teammates = await _rows("champions_usage_teammates", "teammate")
+
+    return {
+        "pokemon": header["pokemon"],
+        "elo_cutoff": elo_cutoff,
+        "usage_percent": header["usage_percent"],
+        "rank": header["rank"],
+        "raw_count": header["raw_count"],
+        "moves": moves,
+        "items": items,
+        "abilities": abilities,
+        "teammates": teammates,
+    }
