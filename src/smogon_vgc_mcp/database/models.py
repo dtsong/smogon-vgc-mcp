@@ -283,6 +283,52 @@ class ChampionsUsageSnapshot:
 
 
 @dataclass
+class ChampionsMoveUsage:
+    """Move usage for Champions (Pikalytics) — no count column."""
+
+    move: str
+    percent: float
+
+
+@dataclass
+class ChampionsItemUsage:
+    """Item usage for Champions (Pikalytics) — no count column."""
+
+    item: str
+    percent: float
+
+
+@dataclass
+class ChampionsAbilityUsage:
+    """Ability usage for Champions (Pikalytics) — no count column."""
+
+    ability: str
+    percent: float
+
+
+@dataclass
+class ChampionsTeammateUsage:
+    """Teammate usage for Champions (Pikalytics) — no count column."""
+
+    teammate: str
+    percent: float
+
+
+@dataclass
+class ChampionsEVSpread:
+    """EV spread for Champions (Pikalytics) — no count column."""
+
+    nature: str | None
+    hp: int
+    atk: int
+    def_: int  # 'def' is a Python keyword
+    spa: int
+    spd: int
+    spe: int
+    percent: float
+
+
+@dataclass
 class ChampionsPokemonUsage:
     """Per-Pokemon usage row for a Champions snapshot."""
 
@@ -290,8 +336,8 @@ class ChampionsPokemonUsage:
     usage_percent: float | None = None
     rank: int | None = None
     raw_count: int | None = None
-    moves: list[tuple[str, float]] = field(default_factory=list)
-    items: list[tuple[str, float]] = field(default_factory=list)
-    abilities: list[tuple[str, float]] = field(default_factory=list)
-    teammates: list[tuple[str, float]] = field(default_factory=list)
-    spreads: list[dict] = field(default_factory=list)
+    moves: list[ChampionsMoveUsage] = field(default_factory=list)
+    items: list[ChampionsItemUsage] = field(default_factory=list)
+    abilities: list[ChampionsAbilityUsage] = field(default_factory=list)
+    teammates: list[ChampionsTeammateUsage] = field(default_factory=list)
+    spreads: list[ChampionsEVSpread] = field(default_factory=list)

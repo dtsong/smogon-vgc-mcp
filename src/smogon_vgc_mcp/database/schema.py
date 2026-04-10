@@ -339,6 +339,10 @@ CREATE INDEX IF NOT EXISTS idx_champ_abilities_name ON champions_dex_abilities(n
 -- Champions usage data (from Pikalytics)
 -- =============================================================================
 
+-- Pikalytics snapshots are replaced in-place per (source, elo_cutoff) on re-scrape.
+-- Unlike the main `snapshots` table (which is keyed by month), we don't accumulate
+-- historical Champions usage — the store layer deletes the prior snapshot before
+-- inserting a new one. Add a date column here if historical accumulation is needed.
 CREATE TABLE IF NOT EXISTS champions_usage_snapshots (
     id INTEGER PRIMARY KEY,
     elo_cutoff TEXT NOT NULL,
