@@ -37,6 +37,44 @@ def test_parse_extracts_moves(html: str) -> None:
     assert isinstance(pct, float)
 
 
+def test_parse_moves_first_entry_clean(html: str) -> None:
+    """Regression: first move entry must not contain FAQ preamble text."""
+    result = parse_pikalytics_page(html, pokemon_slug="incineroar")
+    assert result is not None
+    name, pct = result["moves"][0]
+    assert name == "Fake Out", f"Expected 'Fake Out', got {name!r}"
+    assert len(name) < 40, f"Label too long (preamble leak?): {name!r}"
+    assert "the" not in name.lower().split(), f"Sentence fragment in label: {name!r}"
+    assert pct == pytest.approx(41.092)
+
+
+def test_parse_items_first_entry_clean(html: str) -> None:
+    """Regression: first item entry must not contain FAQ preamble text."""
+    result = parse_pikalytics_page(html, pokemon_slug="incineroar")
+    assert result is not None
+    name, _pct = result["items"][0]
+    assert name == "Sitrus Berry", f"Expected 'Sitrus Berry', got {name!r}"
+    assert len(name) < 40, f"Label too long (preamble leak?): {name!r}"
+
+
+def test_parse_abilities_first_entry_clean(html: str) -> None:
+    """Regression: first ability entry must not contain FAQ preamble text."""
+    result = parse_pikalytics_page(html, pokemon_slug="incineroar")
+    assert result is not None
+    name, _pct = result["abilities"][0]
+    assert name == "Intimidate", f"Expected 'Intimidate', got {name!r}"
+    assert len(name) < 40, f"Label too long (preamble leak?): {name!r}"
+
+
+def test_parse_teammates_first_entry_clean(html: str) -> None:
+    """Regression: first teammate entry must not contain FAQ preamble text."""
+    result = parse_pikalytics_page(html, pokemon_slug="incineroar")
+    assert result is not None
+    name, _pct = result["teammates"][0]
+    assert name == "Sinistcha", f"Expected 'Sinistcha', got {name!r}"
+    assert len(name) < 40, f"Label too long (preamble leak?): {name!r}"
+
+
 def test_parse_extracts_items_abilities_teammates(html: str) -> None:
     result = parse_pikalytics_page(html, pokemon_slug="incineroar")
     assert result is not None

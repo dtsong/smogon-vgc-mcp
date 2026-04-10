@@ -29,6 +29,24 @@ from smogon_vgc_mcp.utils import fetch_text_resilient
 _FAQ_ENTRY_RE = re.compile(r"([A-Za-z][^(]+?)\s*\(([\d.]+)%\)")
 _USAGE_RE = re.compile(r"Usage\s+Percent\s+([\d.]+)\s*%", re.I)
 
+# Preamble terminators: FAQ answers start with "The top X are ...", "... synergizes well with ..."
+_PREAMBLE_SEPS = (" are ", " include ", " is ", " with ")
+
+
+def _strip_faq_preamble(answer: str) -> str:
+    """Strip the introductory sentence from a Pikalytics FAQ answer.
+
+    Answers like "The top moves for Incineroar ... are Fake Out (41%)" have a
+    prose preamble before the first real entry name.  Split on the last
+    occurrence of a known terminator and keep the trailing portion so the
+    first regex match starts at the entry name rather than the preamble.
+    """
+    for sep in _PREAMBLE_SEPS:
+        idx = answer.rfind(sep)
+        if idx >= 0:
+            return answer[idx + len(sep) :]
+    return answer
+
 
 def _extract_faq_answers(soup: BeautifulSoup) -> dict[str, str]:
     """Return a mapping of lowercased question keyword -> answer text from FAQPage JSON-LD."""
@@ -57,7 +75,7 @@ def _parse_faq_section(answers: dict[str, str], keyword: str) -> list[tuple[str,
         if keyword not in question:
             continue
         results: list[tuple[str, float]] = []
-        for m in _FAQ_ENTRY_RE.finditer(text):
+        for m in _FAQ_ENTRY_RE.finditer(_strip_faq_preamble(text)):
             name = m.group(1).strip()
             try:
                 pct = float(m.group(2))
