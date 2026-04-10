@@ -18,3 +18,9 @@ package-lock.json
 
 # Git worktrees
 .worktrees/
+
+# Local agent / workflow state
+.claire/
+.claude/council/sessions/
+memory/
+.npmrc
