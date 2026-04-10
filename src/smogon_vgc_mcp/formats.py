@@ -6,6 +6,7 @@ and Google Sheet tab IDs for tournament teams.
 """
 
 from dataclasses import dataclass, field
+from datetime import date, datetime
 
 
 @dataclass
@@ -25,6 +26,10 @@ class FormatConfig:
     calc_backend: str = "smogon_calc_gen9"  # Calc backend: "smogon_calc_gen9" or "python_native"
     smogon_stats_available: bool = True  # Whether Smogon chaos JSON stats exist
     min_battles: int = 500  # Minimum battle count to consider stats reliable
+    # Historical archive support (Nugget Bridge indexing). Inclusive
+    # (YYYY-MM-DD, YYYY-MM-DD) bounds used by get_format_for_date.
+    date_range: tuple[str, str] | None = None
+    is_historical: bool = False  # Archive-only format; skip live stats/sheet refresh
 
 
 # Google Sheet ID for VGC Pastes Repository
@@ -61,6 +66,68 @@ FORMATS: dict[str, FormatConfig] = {
         smogon_stats_available=False,
         is_current=False,
     ),
+    # Historical archives — Nugget Bridge corpus (2012-2017). No live stats,
+    # no sheet data, read-only set/prose lookup via nugget_bridge tools.
+    "vgc12": FormatConfig(
+        code="vgc12",
+        name="VGC 2012 (BW)",
+        smogon_format_id="",
+        available_months=[],
+        generation=5,
+        smogon_stats_available=False,
+        date_range=("2012-01-01", "2012-12-31"),
+        is_historical=True,
+    ),
+    "vgc13": FormatConfig(
+        code="vgc13",
+        name="VGC 2013 (BW2)",
+        smogon_format_id="",
+        available_months=[],
+        generation=5,
+        smogon_stats_available=False,
+        date_range=("2013-01-01", "2013-12-31"),
+        is_historical=True,
+    ),
+    "vgc14": FormatConfig(
+        code="vgc14",
+        name="VGC 2014 (XY)",
+        smogon_format_id="",
+        available_months=[],
+        generation=6,
+        smogon_stats_available=False,
+        date_range=("2014-01-01", "2014-12-31"),
+        is_historical=True,
+    ),
+    "vgc15": FormatConfig(
+        code="vgc15",
+        name="VGC 2015 (ORAS)",
+        smogon_format_id="",
+        available_months=[],
+        generation=6,
+        smogon_stats_available=False,
+        date_range=("2015-01-01", "2015-12-31"),
+        is_historical=True,
+    ),
+    "vgc16": FormatConfig(
+        code="vgc16",
+        name="VGC 2016 (ORAS restricted)",
+        smogon_format_id="",
+        available_months=[],
+        generation=6,
+        smogon_stats_available=False,
+        date_range=("2016-01-01", "2016-08-31"),
+        is_historical=True,
+    ),
+    "vgc17": FormatConfig(
+        code="vgc17",
+        name="VGC 2017 (SM)",
+        smogon_format_id="",
+        available_months=[],
+        generation=7,
+        smogon_stats_available=False,
+        date_range=("2016-09-01", "2017-12-31"),
+        is_historical=True,
+    ),
 }
 
 DEFAULT_FORMAT = "regi"
@@ -94,6 +161,36 @@ def get_current_format() -> FormatConfig:
         if fmt.is_current:
             return fmt
     return FORMATS[DEFAULT_FORMAT]
+
+
+def get_format_for_date(dt: datetime | date | str) -> FormatConfig | None:
+    """Resolve a FormatConfig from a publication date.
+
+    Scans formats with a ``date_range`` and returns the first whose inclusive
+    bounds contain ``dt``. Used by the Nugget Bridge ingest to tag historical
+    posts with their contemporaneous VGC format.
+
+    Args:
+        dt: Date as a ``datetime``/``date`` or an ISO-8601 string (the first
+            10 characters are parsed as ``YYYY-MM-DD``).
+
+    Returns:
+        Matching FormatConfig, or None if no format covers the date.
+    """
+    if isinstance(dt, str):
+        iso = dt[:10]
+    elif isinstance(dt, datetime):
+        iso = dt.date().isoformat()
+    else:
+        iso = dt.isoformat()
+
+    for fmt in FORMATS.values():
+        if fmt.date_range is None:
+            continue
+        start, end = fmt.date_range
+        if start <= iso <= end:
+            return fmt
+    return None
 
 
 def list_formats() -> list[FormatConfig]:

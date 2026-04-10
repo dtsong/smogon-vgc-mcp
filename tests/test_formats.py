@@ -1,5 +1,7 @@
 """Tests for formats.py - VGC format configuration."""
 
+from datetime import date, datetime
+
 import pytest
 
 from smogon_vgc_mcp.formats import (
@@ -8,6 +10,7 @@ from smogon_vgc_mcp.formats import (
     FormatConfig,
     get_current_format,
     get_format,
+    get_format_for_date,
     get_moveset_url,
     get_sheet_csv_url,
     get_smogon_stats_url,
@@ -201,3 +204,72 @@ class TestChampionsFormat:
     def test_champions_ma_not_current(self):
         fmt = get_format("champions_ma")
         assert fmt.is_current is False
+
+
+class TestHistoricalFormats:
+    """Tests for the VGC12-VGC17 archive formats (Nugget Bridge corpus)."""
+
+    @pytest.mark.parametrize(
+        "code,generation,start,end",
+        [
+            ("vgc12", 5, "2012-01-01", "2012-12-31"),
+            ("vgc13", 5, "2013-01-01", "2013-12-31"),
+            ("vgc14", 6, "2014-01-01", "2014-12-31"),
+            ("vgc15", 6, "2015-01-01", "2015-12-31"),
+            ("vgc16", 6, "2016-01-01", "2016-08-31"),
+            ("vgc17", 7, "2016-09-01", "2017-12-31"),
+        ],
+    )
+    def test_historical_entry(self, code, generation, start, end):
+        fmt = get_format(code)
+        assert fmt.is_historical is True
+        assert fmt.smogon_stats_available is False
+        assert fmt.is_current is False
+        assert fmt.generation == generation
+        assert fmt.date_range == (start, end)
+        assert fmt.available_months == []
+
+    def test_default_format_config_has_new_fields(self):
+        """Non-historical formats keep their existing shape (new fields default)."""
+        regi = FORMATS["regi"]
+        assert regi.is_historical is False
+        assert regi.date_range is None
+
+
+class TestGetFormatForDate:
+    """Tests for get_format_for_date era resolution."""
+
+    def test_accepts_iso_string(self):
+        fmt = get_format_for_date("2017-04-15")
+        assert fmt is not None
+        assert fmt.code == "vgc17"
+
+    def test_accepts_datetime(self):
+        fmt = get_format_for_date(datetime(2014, 6, 1))
+        assert fmt is not None
+        assert fmt.code == "vgc14"
+
+    def test_accepts_date(self):
+        fmt = get_format_for_date(date(2013, 3, 10))
+        assert fmt is not None
+        assert fmt.code == "vgc13"
+
+    def test_vgc16_vgc17_boundary(self):
+        """VGC16 ends 2016-08-31; VGC17 starts 2016-09-01."""
+        assert get_format_for_date("2016-08-31").code == "vgc16"
+        assert get_format_for_date("2016-09-01").code == "vgc17"
+
+    def test_year_boundaries(self):
+        assert get_format_for_date("2012-01-01").code == "vgc12"
+        assert get_format_for_date("2012-12-31").code == "vgc12"
+        assert get_format_for_date("2013-01-01").code == "vgc13"
+
+    def test_out_of_range_returns_none(self):
+        assert get_format_for_date("2000-01-01") is None
+        assert get_format_for_date("2020-01-01") is None
+
+    def test_iso_timestamp_string(self):
+        """Callers may pass full WP ISO timestamps; first 10 chars are used."""
+        fmt = get_format_for_date("2017-04-15T12:34:56Z")
+        assert fmt is not None
+        assert fmt.code == "vgc17"

@@ -336,6 +336,121 @@ CREATE INDEX IF NOT EXISTS idx_champ_moves_category ON champions_dex_moves(categ
 CREATE INDEX IF NOT EXISTS idx_champ_abilities_name ON champions_dex_abilities(name);
 """
 
+# =============================================================================
+# Nugget Bridge historical indexing (VGC12-VGC17 archive)
+# =============================================================================
+# Four additive tables. All rows are per-WordPress-post, per-stage state is
+# tracked via *_status columns so the ingest pipeline is idempotent and
+# resumable. See docs/nugget-bridge.md (PR3) for the pipeline diagram.
+
+NUGGET_BRIDGE_SCHEMA = """
+-- Raw WordPress post payload + per-stage pipeline state
+CREATE TABLE IF NOT EXISTS nb_posts (
+    id INTEGER PRIMARY KEY,                   -- WP post id
+    slug TEXT NOT NULL,
+    url TEXT NOT NULL,
+    title TEXT NOT NULL,
+    published_at TIMESTAMP,
+    modified_at TIMESTAMP,
+    author TEXT,
+    categories_json TEXT,                     -- JSON array of category names
+    tags_json TEXT,                           -- JSON array of tag names
+    category TEXT,                            -- primary category (e.g. "Reports")
+    content_html TEXT NOT NULL,
+    content_text TEXT,                        -- BS4-stripped plaintext
+    format TEXT,                              -- resolved via get_format_for_date
+    format_confidence TEXT,                   -- "declared" | "inferred" | "unknown"
+    fetch_status TEXT DEFAULT 'pending',      -- pending|ok|failed
+    extract_status TEXT DEFAULT 'pending',
+    chunk_status TEXT DEFAULT 'pending',
+    embed_status TEXT DEFAULT 'pending',
+    extract_error TEXT,
+    embed_error TEXT,
+    extract_model TEXT,
+    extract_cost_usd REAL DEFAULT 0,
+    embed_cost_usd REAL DEFAULT 0,
+    content_hash TEXT,
+    fetched_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_nb_posts_format ON nb_posts(format);
+CREATE INDEX IF NOT EXISTS idx_nb_posts_published ON nb_posts(published_at);
+CREATE INDEX IF NOT EXISTS idx_nb_posts_category ON nb_posts(category);
+CREATE INDEX IF NOT EXISTS idx_nb_posts_fetch_status ON nb_posts(fetch_status);
+CREATE INDEX IF NOT EXISTS idx_nb_posts_extract_status ON nb_posts(extract_status);
+
+-- LLM-extracted Pokemon sets
+CREATE TABLE IF NOT EXISTS nb_sets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    post_id INTEGER NOT NULL REFERENCES nb_posts(id) ON DELETE CASCADE,
+    format TEXT,                              -- denormalized from nb_posts.format
+    pokemon TEXT NOT NULL,                    -- as-written
+    pokemon_normalized TEXT NOT NULL,         -- canonical form for lookup
+    ability TEXT,
+    item TEXT,
+    nature TEXT,
+    tera_type TEXT,                           -- always NULL pre-SwSh eras
+    ev_hp INTEGER,
+    ev_atk INTEGER,
+    ev_def INTEGER,
+    ev_spa INTEGER,
+    ev_spd INTEGER,
+    ev_spe INTEGER,
+    iv_hp INTEGER DEFAULT 31,
+    iv_atk INTEGER DEFAULT 31,
+    iv_def INTEGER DEFAULT 31,
+    iv_spa INTEGER DEFAULT 31,
+    iv_spd INTEGER DEFAULT 31,
+    iv_spe INTEGER DEFAULT 31,
+    move1 TEXT,
+    move2 TEXT,
+    move3 TEXT,
+    move4 TEXT,
+    level INTEGER DEFAULT 50,
+    confidence REAL,
+    raw_snippet TEXT,                         -- verbatim source region, ≤300 chars
+    extractor_version TEXT,
+    validated INTEGER DEFAULT 0,              -- 1 if dex cross-check passed
+    source_position INTEGER                   -- ordinal within post
+);
+
+CREATE INDEX IF NOT EXISTS idx_nb_sets_pokemon_format
+    ON nb_sets(pokemon_normalized, format);
+CREATE INDEX IF NOT EXISTS idx_nb_sets_post ON nb_sets(post_id);
+CREATE INDEX IF NOT EXISTS idx_nb_sets_pokemon ON nb_sets(pokemon_normalized);
+
+-- Semantic chunks (heading-aware, tiktoken ~500 tokens)
+CREATE TABLE IF NOT EXISTS nb_chunks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    post_id INTEGER NOT NULL REFERENCES nb_posts(id) ON DELETE CASCADE,
+    chunk_index INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    token_count INTEGER,
+    section_heading TEXT,
+    -- Denormalized for filter-then-rank semantic queries
+    format TEXT,
+    published_at TIMESTAMP,
+    title TEXT,
+    url TEXT,
+    category TEXT,
+    pokemon_mentions_json TEXT,               -- JSON array of normalized names
+    UNIQUE(post_id, chunk_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_nb_chunks_format ON nb_chunks(format);
+CREATE INDEX IF NOT EXISTS idx_nb_chunks_post ON nb_chunks(post_id);
+
+-- Float32 embeddings (numpy tobytes, little-endian). Loaded in-memory at
+-- query time; BLOB keeps the deployment footprint to one SQLite file.
+CREATE TABLE IF NOT EXISTS nb_chunk_embeddings (
+    chunk_id INTEGER PRIMARY KEY REFERENCES nb_chunks(id) ON DELETE CASCADE,
+    model TEXT NOT NULL,
+    dim INTEGER NOT NULL,
+    embedding BLOB NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
 
 def get_db_path() -> Path:
     """Get the database path, respecting environment variable override."""
@@ -368,6 +483,14 @@ async def migrate_add_format_column(db: aiosqlite.Connection) -> None:
     await db.commit()
 
 
+async def migrate_add_nugget_bridge_tables(db: aiosqlite.Connection) -> None:
+    """Create Nugget Bridge archive tables (nb_posts, nb_sets, nb_chunks,
+    nb_chunk_embeddings). All statements use ``CREATE TABLE IF NOT EXISTS``
+    so this is safe to run on every startup."""
+    await db.executescript(NUGGET_BRIDGE_SCHEMA)
+    await db.commit()
+
+
 async def init_database(db_path: Path | None = None) -> None:
     """Initialize the database with schema and run migrations."""
     if db_path is None:
@@ -379,6 +502,7 @@ async def init_database(db_path: Path | None = None) -> None:
     async with aiosqlite.connect(db_path, timeout=DB_TIMEOUT) as db:
         await db.executescript(SCHEMA)
         await migrate_add_format_column(db)
+        await migrate_add_nugget_bridge_tables(db)
         await db.commit()
 
 
