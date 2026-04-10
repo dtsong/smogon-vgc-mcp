@@ -3,11 +3,8 @@
 from mcp.server.fastmcp import FastMCP
 
 from smogon_vgc_mcp.database.queries import get_champions_usage
-from smogon_vgc_mcp.utils import make_error_response
-
-
-def _normalize_pokemon_id(pokemon: str) -> str:
-    return pokemon.lower().replace(" ", "").replace("-", "")
+from smogon_vgc_mcp.fetcher.pikalytics_champions import ELO_CUTOFFS
+from smogon_vgc_mcp.utils import make_error_response, normalize_pokemon_id
 
 
 def register_champions_usage_tools(mcp: FastMCP) -> None:
@@ -31,14 +28,13 @@ def register_champions_usage_tools(mcp: FastMCP) -> None:
             pokemon: Pokemon name (e.g., "Incineroar", "Garchomp").
             elo_cutoff: ELO cutoff: "0+", "1500+", "1630+", or "1760+".
         """
-        valid_cutoffs = {"0+", "1500+", "1630+", "1760+"}
-        if elo_cutoff not in valid_cutoffs:
+        if elo_cutoff not in ELO_CUTOFFS:
             return make_error_response(
                 f"Invalid elo_cutoff '{elo_cutoff}'",
-                hint=f"Must be one of: {sorted(valid_cutoffs)}",
+                hint=f"Must be one of: {ELO_CUTOFFS}",
             )
 
-        pokemon_id = _normalize_pokemon_id(pokemon)
+        pokemon_id = normalize_pokemon_id(pokemon)
         result = await get_champions_usage(pokemon_id, elo_cutoff=elo_cutoff)
         if result is None:
             return make_error_response(

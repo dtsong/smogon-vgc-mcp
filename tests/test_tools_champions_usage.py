@@ -74,7 +74,11 @@ async def test_mcp_tool_returns_usage(monkeypatch, tmp_path) -> None:
         "get_champions_usage_stats",
         {"pokemon": "Incineroar", "elo_cutoff": "0+"},
     )
-    assert result
+    assert len(result) == 1
+    payload = result[0].text
+    assert "incineroar" in payload.lower()
+    assert "usage_percent" in payload
+    assert "error" not in payload.lower()
 
 
 @pytest.mark.asyncio
@@ -91,4 +95,7 @@ async def test_mcp_tool_returns_error_for_missing(monkeypatch, tmp_path) -> None
         "get_champions_usage_stats",
         {"pokemon": "Missingno", "elo_cutoff": "0+"},
     )
-    assert result
+    assert len(result) == 1
+    payload = result[0].text
+    assert "error" in payload.lower()
+    assert "no champions usage data" in payload.lower()
