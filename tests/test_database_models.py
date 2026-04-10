@@ -2,9 +2,9 @@
 
 from smogon_vgc_mcp.database.models import (
     AbilityUsage,
-    CheckCounter,
     ChampionsDexMove,
     ChampionsDexPokemon,
+    CheckCounter,
     DexAbility,
     DexItem,
     DexMove,
