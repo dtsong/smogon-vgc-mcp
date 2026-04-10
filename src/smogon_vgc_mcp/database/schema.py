@@ -1,6 +1,8 @@
 """SQLite database schema for Smogon VGC stats."""
 
 import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import aiosqlite
@@ -456,29 +458,8 @@ async def init_database(db_path: Path | None = None) -> None:
         await db.commit()
 
 
-async def _enable_foreign_keys(db: aiosqlite.Connection) -> None:
-    """Enable foreign key enforcement for a connection."""
-    await db.execute("PRAGMA foreign_keys = ON")
-
-
-class _ForeignKeysConnection:
-    """Async context manager that wraps aiosqlite.connect and enables foreign keys."""
-
-    def __init__(self, db_path: Path) -> None:
-        self._db_path = db_path
-        self._conn: aiosqlite.Connection | None = None
-
-    async def __aenter__(self) -> aiosqlite.Connection:
-        self._conn = await aiosqlite.connect(self._db_path, timeout=DB_TIMEOUT)
-        await _enable_foreign_keys(self._conn)
-        return self._conn
-
-    async def __aexit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
-        if self._conn is not None:
-            await self._conn.close()
-
-
-def get_connection(db_path: Path | None = None) -> _ForeignKeysConnection:
+@asynccontextmanager
+async def get_connection(db_path: Path | None = None) -> AsyncIterator[aiosqlite.Connection]:
     """Get a database connection context manager.
 
     Usage:
@@ -491,4 +472,6 @@ def get_connection(db_path: Path | None = None) -> _ForeignKeysConnection:
     if db_path is None:
         db_path = get_db_path()
 
-    return _ForeignKeysConnection(db_path)
+    async with aiosqlite.connect(db_path, timeout=DB_TIMEOUT) as db:
+        await db.execute("PRAGMA foreign_keys = ON")
+        yield db
