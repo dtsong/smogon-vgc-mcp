@@ -7,6 +7,7 @@ import aiosqlite
 
 from smogon_vgc_mcp.database.models import (
     AbilityUsage,
+    ChampionsDexMove,
     ChampionsDexPokemon,
     CheckCounter,
     DexAbility,
@@ -1504,3 +1505,114 @@ async def search_champions_pokemon_by_type(
         ) as cursor:
             rows = await cursor.fetchall()
     return [_row_to_champions_pokemon(r) for r in rows]
+
+
+# Champions moves queries
+
+
+def _row_to_champions_move(row: aiosqlite.Row) -> ChampionsDexMove:
+    """Convert a DB row to a ChampionsDexMove dataclass.
+
+    `num`, `pp`, and `priority` are passed through as-is (including NULL).
+    Do not coerce NULL to 0 here — doing so masks genuine NULLs as real
+    values and hides DB schema drift behind plausible numeric defaults.
+    """
+    return ChampionsDexMove(
+        id=row["id"],
+        num=row["num"],
+        name=row["name"],
+        type=row["type"],
+        category=row["category"],
+        base_power=row["base_power"],
+        accuracy=row["accuracy"],
+        pp=row["pp"],
+        priority=row["priority"],
+        target=row["target"],
+        description=row["description"],
+        short_desc=row["short_desc"],
+    )
+
+
+async def get_champions_move(
+    move_id: str,
+    db_path: Path | None = None,
+) -> ChampionsDexMove | None:
+    """Look up a single Champions move by normalized id (e.g. 'dragonclaw')."""
+    async with get_connection(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT id, num, name, type, category, base_power, accuracy,
+                      pp, priority, target, description, short_desc
+               FROM champions_dex_moves WHERE id = ?""",
+            (move_id,),
+        ) as cursor:
+            row = await cursor.fetchone()
+    return _row_to_champions_move(row) if row else None
+
+
+async def list_champions_moves(
+    db_path: Path | None = None,
+) -> list[ChampionsDexMove]:
+    """Return all Champions moves, ordered by name."""
+    async with get_connection(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT id, num, name, type, category, base_power, accuracy,
+                      pp, priority, target, description, short_desc
+               FROM champions_dex_moves ORDER BY name"""
+        ) as cursor:
+            rows = await cursor.fetchall()
+    return [_row_to_champions_move(r) for r in rows]
+
+
+async def get_champions_usage(
+    pokemon: str,
+    elo_cutoff: str = "0+",
+    db_path: Path | None = None,
+) -> dict | None:
+    """Return the latest Pikalytics usage payload for a Pokemon + ELO cutoff.
+
+    Returns None if no snapshot exists or the Pokemon is absent.
+    """
+    async with get_connection(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT pu.id, pu.pokemon, pu.usage_percent, pu.rank, pu.raw_count
+               FROM champions_pokemon_usage pu
+               JOIN champions_usage_snapshots s ON s.id = pu.snapshot_id
+               WHERE s.source = 'pikalytics'
+                 AND s.elo_cutoff = ?
+                 AND pu.pokemon = ?
+               ORDER BY s.fetched_at DESC
+               LIMIT 1""",
+            (elo_cutoff, pokemon),
+        ) as cursor:
+            header = await cursor.fetchone()
+        if header is None:
+            return None
+        pu_id = header["id"]
+
+        async def _rows(table: str, col: str) -> list[tuple[str, float]]:
+            sql = (
+                f"SELECT {col}, percent FROM {table}"
+                " WHERE pokemon_usage_id = ? ORDER BY percent DESC"
+            )
+            async with db.execute(sql, (pu_id,)) as c:
+                return [(r[0], r[1]) async for r in c]
+
+        moves = await _rows("champions_usage_moves", "move")
+        items = await _rows("champions_usage_items", "item")
+        abilities = await _rows("champions_usage_abilities", "ability")
+        teammates = await _rows("champions_usage_teammates", "teammate")
+
+    return {
+        "pokemon": header["pokemon"],
+        "elo_cutoff": elo_cutoff,
+        "usage_percent": header["usage_percent"],
+        "rank": header["rank"],
+        "raw_count": header["raw_count"],
+        "moves": moves,
+        "items": items,
+        "abilities": abilities,
+        "teammates": teammates,
+    }

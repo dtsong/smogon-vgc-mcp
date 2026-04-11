@@ -1,0 +1,412 @@
+"""Parse Pokemon Champions usage data from Pikalytics.
+
+URL pattern:
+  https://www.pikalytics.com/pokedex/championspreview/<pokemon_slug>
+
+Each page is server-rendered HTML and embeds several JSON-LD blocks.
+The FAQPage JSON-LD block contains structured answer text with percentage
+data for moves, items, abilities, and teammates.  We parse that block first
+for the four sections, and fall back to plain-text search for the top-level
+usage percentage.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import re
+from pathlib import Path
+from typing import Any
+
+import aiosqlite
+from bs4 import BeautifulSoup
+
+from smogon_vgc_mcp.database.schema import get_connection, get_db_path, init_database
+from smogon_vgc_mcp.resilience import get_all_circuit_states
+from smogon_vgc_mcp.utils import fetch_text_resilient
+
+logger = logging.getLogger(__name__)
+
+# Matches "Label Name (41.092%)" patterns in FAQ answer text. The percentage
+# group is a strict decimal so float() cannot fail downstream.
+_FAQ_ENTRY_RE = re.compile(r"([A-Za-z][^(]+?)\s*\((\d+(?:\.\d+)?)%\)")
+_USAGE_RE = re.compile(r"Usage\s+Percent\s+(\d+(?:\.\d+)?)\s*%", re.I)
+
+# Preamble terminators: FAQ answers start with "The top X are ...", "... synergizes well with ..."
+_PREAMBLE_SEPS = (" are ", " include ", " is ", " with ")
+
+
+def _strip_faq_preamble(answer: str) -> str:
+    """Strip the introductory sentence from a Pikalytics FAQ answer.
+
+    Answers like "The top moves for Incineroar ... are Fake Out (41%)" have a
+    prose preamble before the first real entry name.  The preamble lives
+    entirely BEFORE the first "(" character — every entry percentage is of
+    the shape "(NN%)", so the prefix up to that first "(" contains the
+    preamble plus at most the first entry's display name.  Scoping the
+    terminator search to that prefix means a later generic English word
+    like " with " inside another entry ("Pokemon B with Water Absorb")
+    can never truncate legitimate entries.
+
+    If there is no "(" at all, nothing useful can be parsed; return the
+    answer unchanged and let `_parse_faq_section` emit a drift warning.
+    """
+    first_paren = answer.find("(")
+    if first_paren < 0:
+        return answer
+    prefix = answer[:first_paren]
+    best_idx = -1
+    best_sep_len = 0
+    for sep in _PREAMBLE_SEPS:
+        idx = prefix.rfind(sep)
+        if idx > best_idx:
+            best_idx = idx
+            best_sep_len = len(sep)
+    if best_idx >= 0:
+        return answer[best_idx + best_sep_len :]
+    return answer
+
+
+def _extract_faq_answers(soup: BeautifulSoup) -> dict[str, str]:
+    """Return a mapping of lowercased question keyword -> answer text from FAQPage JSON-LD.
+
+    Logs (but does not raise on) malformed JSON-LD blocks so a silently
+    corrupt page is visible in server logs instead of returning empty
+    sections that would overwrite live data downstream.
+    """
+    for script in soup.find_all("script", type="application/ld+json"):
+        try:
+            payload = json.loads(script.string or "{}")
+        except (json.JSONDecodeError, TypeError) as exc:
+            logger.warning("Pikalytics JSON-LD block failed to parse: %s", exc)
+            continue
+        if not isinstance(payload, dict) or payload.get("@type") != "FAQPage":
+            continue
+        answers: dict[str, str] = {}
+        for item in payload.get("mainEntity", []):
+            if not isinstance(item, dict):
+                continue
+            question = (item.get("name") or "").lower()
+            answer_obj = item.get("acceptedAnswer", {})
+            answer_text = answer_obj.get("text", "") if isinstance(answer_obj, dict) else ""
+            answers[question] = answer_text
+        return answers
+    # No FAQPage JSON-LD block at all — likely schema drift.  Log a warning
+    # so monitoring can fire; returning {} here means downstream sections will
+    # be empty, and `parse_pikalytics_page` refuses partially-empty pages.
+    logger.warning("Pikalytics page has no FAQPage JSON-LD block — schema drift likely")
+    return {}
+
+
+def _parse_faq_section(answers: dict[str, str], keyword: str) -> list[tuple[str, float]]:
+    """Find the answer whose question contains *keyword* and extract (name, pct) pairs.
+
+    Logs a warning if a matching question exists but produces zero entries,
+    since that combination is the fingerprint of preamble-shape drift (the
+    answer text no longer contains a recognised terminator, or Pikalytics
+    restructured the entry format).
+    """
+    matched = False
+    for question, text in answers.items():
+        if keyword not in question:
+            continue
+        matched = True
+        results: list[tuple[str, float]] = []
+        # The regex percentage group is a strict decimal, so float() cannot
+        # raise here — no silent swallow path is possible.
+        for m in _FAQ_ENTRY_RE.finditer(_strip_faq_preamble(text)):
+            name = m.group(1).strip()
+            if name:
+                results.append((name, float(m.group(2))))
+        if results:
+            return results
+    if matched:
+        logger.warning(
+            "Pikalytics FAQ section %r matched a question but yielded zero entries "
+            "— possible preamble or entry-format drift",
+            keyword,
+        )
+    else:
+        logger.warning("Pikalytics FAQ section %r found no matching question", keyword)
+    return []
+
+
+def parse_pikalytics_page(html: str, pokemon_slug: str) -> dict[str, Any] | None:
+    """Parse a Pikalytics championspreview page into a usage dict.
+
+    Returns None when the page has no extractable signal.  Returned dict has
+    keys: pokemon, usage_percent, rank, raw_count,
+    moves, items, abilities, teammates.
+
+    ``pokemon`` is set to ``pokemon_slug`` verbatim — callers must ensure
+    the slug equals ``normalize_pokemon_id(display_name)`` or downstream
+    ``get_champions_usage(pokemon=...)`` lookups will miss.
+
+    The three distinct failure modes (empty body, no FAQ block, zero signal)
+    are logged with dedicated warnings so operators can distinguish schema
+    drift from legitimate empty pages.  A real HTTP 404 does not reach this
+    function — ``fetch_text_resilient`` raises before we see the body.
+    """
+    if not html or len(html.strip()) < 200:
+        logger.warning(
+            "Pikalytics page %r: HTML too short (len=%d) — treating as empty",
+            pokemon_slug,
+            len(html or ""),
+        )
+        return None
+
+    soup = BeautifulSoup(html, "html.parser")
+
+    # --- Top-level usage percent from visible page text ---
+    # Regex matches a strict decimal, so float() cannot raise.
+    usage_percent: float | None = None
+    body_text = soup.get_text(" ", strip=True)
+    m = _USAGE_RE.search(body_text)
+    if m:
+        usage_percent = float(m.group(1))
+
+    # --- Section data from FAQPage JSON-LD ---
+    faq = _extract_faq_answers(soup)
+    moves = _parse_faq_section(faq, "move")
+    items = _parse_faq_section(faq, "item")
+    abilities = _parse_faq_section(faq, "abilit")
+    teammates = _parse_faq_section(faq, "teammate")
+
+    # Require at least one signal to consider the page valid.  Zero signal
+    # after reaching this point means either the FAQPage block is missing
+    # (logged in `_extract_faq_answers`) or every section drifted
+    # simultaneously.  Refuse the page so the caller can skip the store and
+    # preserve the prior snapshot.
+    if usage_percent is None and not moves and not items and not abilities:
+        logger.warning(
+            "Pikalytics page %r: no usage signal extracted — refusing parsed dict",
+            pokemon_slug,
+        )
+        return None
+
+    return {
+        "pokemon": pokemon_slug,
+        "usage_percent": usage_percent,
+        "rank": None,
+        "raw_count": None,
+        "moves": moves,
+        "items": items,
+        "abilities": abilities,
+        "teammates": teammates,
+    }
+
+
+PIKALYTICS_URL_TEMPLATE = "https://www.pikalytics.com/pokedex/championspreview/{slug}"
+
+# Seed list of Champions Pokemon slugs Pikalytics exposes.  Extend as the
+# format evolves; the fetcher takes an explicit `slugs` override so callers
+# can probe new entries without editing this file.
+PIKALYTICS_POKEMON_SLUGS = [
+    "incineroar",
+    "sneasler",
+    "sinistcha",
+    "archaludon",
+    "whimsicott",
+    "pelipper",
+    "ursaluna",
+    "garchomp",
+    "farigiraf",
+    "dragonite",
+    "charizard",
+    "basculegion",
+    "tyranitar",
+    "kingambit",
+]
+
+# Only "0+" is currently supported. PIKALYTICS_URL_TEMPLATE does not encode
+# an ELO filter, so every non-"0+" cutoff would fetch and silently store the
+# same default data under a misleading label. Higher-ELO support will land
+# once the real cutoff query parameter is wired up against a live page.
+ELO_CUTOFFS = ["0+"]
+
+
+async def store_champions_usage(
+    db: aiosqlite.Connection,
+    elo_cutoff: str,
+    pokemon_data: list[dict],
+    *,
+    _commit: bool = True,
+) -> tuple[int, int]:
+    """Upsert a Pikalytics snapshot for one ELO cutoff.
+
+    Deletes any existing snapshot for this (source, elo_cutoff) so child
+    rows are cleared via ON DELETE CASCADE, then inserts a fresh snapshot
+    and its children. Returns (snapshot_id, pokemon_count).
+
+    Raises ValueError if pokemon_data is empty — we refuse to replace an
+    existing snapshot with nothing, since a parser regression or transient
+    Pikalytics outage would otherwise silently wipe the live data.
+    """
+    if not pokemon_data:
+        raise ValueError(
+            "refusing to store empty Pikalytics snapshot "
+            f"(elo_cutoff={elo_cutoff!r}) — would delete existing data"
+        )
+
+    await db.execute(
+        "DELETE FROM champions_usage_snapshots WHERE source = 'pikalytics' AND elo_cutoff = ?",
+        (elo_cutoff,),
+    )
+
+    cursor = await db.execute(
+        "INSERT INTO champions_usage_snapshots (elo_cutoff, source) VALUES (?, 'pikalytics')",
+        (elo_cutoff,),
+    )
+    snapshot_id = cursor.lastrowid
+    if snapshot_id is None:
+        raise RuntimeError("INSERT INTO champions_usage_snapshots did not return lastrowid")
+
+    count = 0
+    for entry in pokemon_data:
+        poke_cursor = await db.execute(
+            """INSERT INTO champions_pokemon_usage
+               (snapshot_id, pokemon, usage_percent, rank, raw_count)
+               VALUES (?, ?, ?, ?, ?)""",
+            (
+                snapshot_id,
+                entry["pokemon"],
+                entry.get("usage_percent"),
+                entry.get("rank"),
+                entry.get("raw_count"),
+            ),
+        )
+        pu_id = poke_cursor.lastrowid
+        if pu_id is None:
+            raise RuntimeError("INSERT INTO champions_pokemon_usage did not return lastrowid")
+
+        for move, pct in entry.get("moves", []):
+            await db.execute(
+                "INSERT INTO champions_usage_moves"
+                " (pokemon_usage_id, move, percent) VALUES (?, ?, ?)",
+                (pu_id, move, pct),
+            )
+        for item, pct in entry.get("items", []):
+            await db.execute(
+                "INSERT INTO champions_usage_items"
+                " (pokemon_usage_id, item, percent) VALUES (?, ?, ?)",
+                (pu_id, item, pct),
+            )
+        for ability, pct in entry.get("abilities", []):
+            await db.execute(
+                "INSERT INTO champions_usage_abilities"
+                " (pokemon_usage_id, ability, percent) VALUES (?, ?, ?)",
+                (pu_id, ability, pct),
+            )
+        for teammate, pct in entry.get("teammates", []):
+            await db.execute(
+                "INSERT INTO champions_usage_teammates"
+                " (pokemon_usage_id, teammate, percent) VALUES (?, ?, ?)",
+                (pu_id, teammate, pct),
+            )
+        count += 1
+
+    if _commit:
+        await db.commit()
+    return snapshot_id, count
+
+
+async def fetch_pikalytics_pokemon(slug: str) -> tuple[dict | None, str | None]:
+    """Fetch a single Pokemon page from Pikalytics and parse it.
+
+    Returns (parsed_data, error_message). On success, error_message is None.
+    On failure, parsed_data is None and error_message describes why.
+    """
+    url = PIKALYTICS_URL_TEMPLATE.format(slug=slug)
+    result = await fetch_text_resilient(url, service="pikalytics")
+    if not result.success or not result.data:
+        err = result.error.message if result.error else "fetch returned no data"
+        return None, err
+    parsed = parse_pikalytics_page(result.data, pokemon_slug=slug)
+    if parsed is None:
+        # `parse_pikalytics_page` logs one of three distinct warnings
+        # (too-short HTML, missing FAQPage JSON-LD, zero usage signal)
+        # before returning None. Point operators at those logs instead of
+        # echoing a made-up 404 reason — real 404s are raised upstream by
+        # `fetch_text_resilient` and never reach the parser.
+        return (
+            None,
+            "parser refused page — see pikalytics_champions logger warnings "
+            "for the specific failure mode",
+        )
+    return parsed, None
+
+
+async def fetch_and_store_pikalytics_champions(
+    db_path: Path | None = None,
+    *,
+    elo_cutoff: str = "0+",
+    dry_run: bool = False,
+    slugs: list[str] | None = None,
+    request_delay: float = 1.0,
+) -> dict:
+    """Fetch all Pikalytics Champions pages and store atomically.
+
+    One snapshot per ELO cutoff. Callers loop over cutoffs themselves.
+    """
+    if db_path is None:
+        db_path = get_db_path()
+    await init_database(db_path)
+
+    target_slugs = slugs if slugs is not None else PIKALYTICS_POKEMON_SLUGS
+    errors: list[dict] = []
+    results: list[dict] = []
+
+    for slug in target_slugs:
+        data, err = await fetch_pikalytics_pokemon(slug)
+        if data is None:
+            errors.append({"slug": slug, "message": err or "unknown error"})
+        else:
+            results.append(data)
+        if request_delay > 0:
+            await asyncio.sleep(request_delay)
+
+    if dry_run:
+        return {
+            "fetched": len(results),
+            "stored": 0,
+            "errors": errors,
+            "circuit_states": get_all_circuit_states(),
+            "dry_run": True,
+            "results": results,
+        }
+
+    snapshot_id = 0
+    stored = 0
+    if not results:
+        # All per-slug fetches failed; skip the store entirely rather than
+        # wiping the existing snapshot with nothing.
+        errors.append(
+            {
+                "slug": "store",
+                "message": (
+                    "skipped: no Pikalytics pages parsed successfully "
+                    f"({len(errors)} fetch errors); existing snapshot preserved"
+                ),
+            }
+        )
+    else:
+        async with get_connection(db_path) as db:
+            try:
+                snapshot_id, stored = await store_champions_usage(
+                    db, elo_cutoff=elo_cutoff, pokemon_data=results, _commit=False
+                )
+                await db.commit()
+            except (aiosqlite.Error, ValueError) as exc:
+                await db.rollback()
+                errors.append({"slug": "store", "message": str(exc)})
+
+    return {
+        "fetched": len(results),
+        "stored": stored,
+        "snapshot_id": snapshot_id,
+        "elo_cutoff": elo_cutoff,
+        "errors": errors,
+        "circuit_states": get_all_circuit_states(),
+        "dry_run": False,
+    }

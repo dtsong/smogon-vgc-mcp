@@ -254,14 +254,37 @@ class ChampionsDexMove:
     """Champions move data (includes rebalanced moves)."""
 
     id: str
-    num: int
+    # NULL when unknown — Serebii's updated-attacks page does not expose
+    # `num`; coercing to 0 would hide genuine DB drift from consumers.
+    num: int | None
     name: str
     type: str
     category: str
     base_power: int | None
     accuracy: int | None
-    pp: int
-    priority: int = 0
+    # NULL for status-only rows where Serebii prints "--".  Kept nullable
+    # so 0 remains a meaningful "move has no PP" value instead of a
+    # sentinel for "we don't know."
+    pp: int | None
+    priority: int | None = 0
     target: str | None = None
     description: str | None = None
     short_desc: str | None = None
+
+
+# =============================================================================
+# Champions usage data models (from Pikalytics)
+# =============================================================================
+
+
+@dataclass
+class ChampionsUsageSnapshot:
+    """A single Pikalytics Champions usage snapshot for one ELO cutoff."""
+
+    id: int
+    # Live set lives in `fetcher.pikalytics_champions.ELO_CUTOFFS` — only
+    # "0+" is supported today; multi-cutoff support is gated on Pikalytics
+    # exposing a real ELO query parameter.
+    elo_cutoff: str
+    source: str = "pikalytics"
+    fetched_at: str | None = None

@@ -27,6 +27,9 @@ from smogon_vgc_mcp.utils.limits import (
     RANKINGS_MAX_LIMIT,
     cap_limit,
 )
+from smogon_vgc_mcp.utils.pokemon_id import (
+    normalize_pokemon_id,
+)
 from smogon_vgc_mcp.utils.responses import (
     make_degraded_response,
     make_error_response,
@@ -68,6 +71,8 @@ from smogon_vgc_mcp.utils.validators import (
 )
 
 __all__ = [
+    # Pokemon ID normalization
+    "normalize_pokemon_id",
     # Stat names
     "STAT_ORDER",
     "STAT_NAME_MAP",

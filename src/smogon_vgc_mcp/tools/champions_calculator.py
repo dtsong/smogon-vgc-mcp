@@ -26,12 +26,12 @@ from smogon_vgc_mcp.calculator.champions_stats import (
 )
 from smogon_vgc_mcp.database.models import ChampionsDexPokemon
 from smogon_vgc_mcp.database.queries import get_champions_pokemon
-from smogon_vgc_mcp.utils import ValidationError, make_error_response, validate_nature
-
-
-def _normalize_pokemon_id(pokemon: str) -> str:
-    """Normalize Pokemon name to DB ID format."""
-    return pokemon.lower().replace(" ", "").replace("-", "")
+from smogon_vgc_mcp.utils import (
+    ValidationError,
+    make_error_response,
+    normalize_pokemon_id,
+    validate_nature,
+)
 
 
 async def _get_champions_base_stats(pokemon_id: str) -> ChampionsDexPokemon | None:
@@ -101,7 +101,7 @@ def register_champions_calculator_tools(mcp: FastMCP) -> None:
                 hint="Format: 'HP/Atk/Def/SpA/SpD/Spe', e.g. '0/0/0/32/0/2'",
             )
 
-        pokemon_id = _normalize_pokemon_id(pokemon)
+        pokemon_id = normalize_pokemon_id(pokemon)
         dex_entry = await _get_champions_base_stats(pokemon_id)
         if not dex_entry:
             return make_error_response(
@@ -163,8 +163,8 @@ def register_champions_calculator_tools(mcp: FastMCP) -> None:
         except ValidationError as e:
             return make_error_response(e.message, hint=e.hint)
 
-        pokemon1_id = _normalize_pokemon_id(pokemon1)
-        pokemon2_id = _normalize_pokemon_id(pokemon2)
+        pokemon1_id = normalize_pokemon_id(pokemon1)
+        pokemon2_id = normalize_pokemon_id(pokemon2)
 
         dex1 = await _get_champions_base_stats(pokemon1_id)
         if not dex1:
@@ -218,7 +218,7 @@ def register_champions_calculator_tools(mcp: FastMCP) -> None:
         except ValidationError as e:
             return make_error_response(e.message, hint=e.hint)
 
-        pokemon_id = _normalize_pokemon_id(pokemon)
+        pokemon_id = normalize_pokemon_id(pokemon)
         dex_entry = await _get_champions_base_stats(pokemon_id)
         if not dex_entry:
             return make_error_response(
@@ -256,7 +256,12 @@ def register_champions_calculator_tools(mcp: FastMCP) -> None:
             goals: List of goal dicts processed in priority order.
             item: Optional held item for HP threshold calculations.
         """
-        pokemon_id = _normalize_pokemon_id(pokemon)
+        try:
+            validate_nature(nature)
+        except ValidationError as e:
+            return make_error_response(e.message, hint=e.hint)
+
+        pokemon_id = normalize_pokemon_id(pokemon)
         dex_entry = await _get_champions_base_stats(pokemon_id)
         if not dex_entry:
             return make_error_response(
@@ -273,8 +278,18 @@ def register_champions_calculator_tools(mcp: FastMCP) -> None:
                     return make_error_response(
                         f"Goal {i + 1}: speed goal requires 'target_speed'",
                     )
+                try:
+                    target_speed = int(target)
+                except (TypeError, ValueError):
+                    return make_error_response(
+                        f"Goal {i + 1}: 'target_speed' must be an integer, got {target!r}",
+                    )
                 mode = g.get("mode", "outspeed")
-                parsed_goals.append(SpeedGoal(target_speed=int(target), mode=mode))
+                if mode not in ("outspeed", "underspeed"):
+                    return make_error_response(
+                        f"Goal {i + 1}: 'mode' must be 'outspeed' or 'underspeed', got {mode!r}",
+                    )
+                parsed_goals.append(SpeedGoal(target_speed=target_speed, mode=mode))
             elif goal_type == "hp":
                 hp_item = g.get("item", item)
                 if hp_item is None:
