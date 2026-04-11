@@ -7,6 +7,7 @@ import pytest
 
 from smogon_vgc_mcp.database.schema import SCHEMA
 from smogon_vgc_mcp.fetcher.pikalytics_champions import (
+    _strip_faq_preamble,
     fetch_and_store_pikalytics_champions,
     parse_pikalytics_page,
     store_champions_usage,
@@ -419,3 +420,36 @@ def test_parse_soft_not_found_no_longer_dropped() -> None:
     assert result is not None
     assert result["usage_percent"] == pytest.approx(35.8)
     assert ("Fake Out", 50.0) in result["moves"]
+
+
+def test_strip_preamble_does_not_truncate_entries_with_terminator_words() -> None:
+    """Regression: `rfind` over the whole answer would cut every entry after a
+    later " with "/" is " occurrence.  The fix scopes the terminator search
+    to the prose BEFORE the first "(NN%)" match.
+    """
+    # " with " appears both in the preamble AND inside a later entry name.
+    # The old rfind implementation truncated at the LAST " with " — dropping
+    # all three entries.  The new implementation must keep all of them.
+    answer = (
+        "The top teammates for Incineroar are "
+        "Rillaboom (41.0%), "
+        "Pokemon-B with Water Absorb (22.0%), "
+        "Pokemon-C (18.0%)"
+    )
+    stripped = _strip_faq_preamble(answer)
+    # Parse with the real entry regex to verify all three entries survive.
+    import re as _re
+
+    from smogon_vgc_mcp.fetcher.pikalytics_champions import _FAQ_ENTRY_RE
+
+    matches = list(_re.finditer(_FAQ_ENTRY_RE, stripped))
+    assert len(matches) == 3, (
+        f"Expected 3 entries to survive preamble stripping, got {len(matches)}: "
+        f"{[m.group(1).strip() for m in matches]}"
+    )
+    names = [m.group(1).strip() for m in matches]
+    assert "Rillaboom" in names[0]
+    # The middle entry's name starts with "Pokemon-B" and includes " with Water Absorb"
+    # before its percentage — the regex will match up to the first "(" so we just
+    # confirm the third entry (Pokemon-C) survived.
+    assert any("Pokemon-C" in n for n in names)

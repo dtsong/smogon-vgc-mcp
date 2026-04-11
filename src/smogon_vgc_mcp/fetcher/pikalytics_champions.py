@@ -41,17 +41,30 @@ def _strip_faq_preamble(answer: str) -> str:
     """Strip the introductory sentence from a Pikalytics FAQ answer.
 
     Answers like "The top moves for Incineroar ... are Fake Out (41%)" have a
-    prose preamble before the first real entry name.  Split on the last
-    occurrence of a known terminator and keep the trailing portion so the
-    first regex match starts at the entry name rather than the preamble.
+    prose preamble before the first real entry name.  The preamble lives
+    entirely BEFORE the first "(" character — every entry percentage is of
+    the shape "(NN%)", so the prefix up to that first "(" contains the
+    preamble plus at most the first entry's display name.  Scoping the
+    terminator search to that prefix means a later generic English word
+    like " with " inside another entry ("Pokemon B with Water Absorb")
+    can never truncate legitimate entries.
 
-    If the stripped tail contains no entry-shaped match, the caller will log
-    a warning (see `_parse_faq_section`) so preamble-shape drift is visible.
+    If there is no "(" at all, nothing useful can be parsed; return the
+    answer unchanged and let `_parse_faq_section` emit a drift warning.
     """
+    first_paren = answer.find("(")
+    if first_paren < 0:
+        return answer
+    prefix = answer[:first_paren]
+    best_idx = -1
+    best_sep_len = 0
     for sep in _PREAMBLE_SEPS:
-        idx = answer.rfind(sep)
-        if idx >= 0:
-            return answer[idx + len(sep) :]
+        idx = prefix.rfind(sep)
+        if idx > best_idx:
+            best_idx = idx
+            best_sep_len = len(sep)
+    if best_idx >= 0:
+        return answer[best_idx + best_sep_len :]
     return answer
 
 
@@ -311,7 +324,16 @@ async def fetch_pikalytics_pokemon(slug: str) -> tuple[dict | None, str | None]:
         return None, err
     parsed = parse_pikalytics_page(result.data, pokemon_slug=slug)
     if parsed is None:
-        return None, "parser returned None (404 or unparseable page)"
+        # `parse_pikalytics_page` logs one of three distinct warnings
+        # (too-short HTML, missing FAQPage JSON-LD, zero usage signal)
+        # before returning None. Point operators at those logs instead of
+        # echoing a made-up 404 reason — real 404s are raised upstream by
+        # `fetch_text_resilient` and never reach the parser.
+        return (
+            None,
+            "parser refused page — see pikalytics_champions logger warnings "
+            "for the specific failure mode",
+        )
     return parsed, None
 
 
