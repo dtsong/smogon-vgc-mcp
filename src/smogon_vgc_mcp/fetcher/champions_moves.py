@@ -135,11 +135,20 @@ def parse_serebii_moves_page(
     Returns an empty list for empty or malformed HTML.
     """
     if not html or len(html.strip()) < 100:
+        logger.warning(
+            "Serebii moves page: HTML too short (len=%d) — returning empty list",
+            len(html or ""),
+        )
+        if skip_reasons is not None:
+            skip_reasons["html_too_short"] = skip_reasons.get("html_too_short", 0) + 1
         return []
 
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find("table", class_="tab")
     if table is None:
+        logger.warning("Serebii moves page: no <table class='tab'> found — likely layout change")
+        if skip_reasons is not None:
+            skip_reasons["missing_table"] = skip_reasons.get("missing_table", 0) + 1
         return []
 
     def _skip(reason: str) -> None:

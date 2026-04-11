@@ -44,6 +44,9 @@ def _strip_faq_preamble(answer: str) -> str:
     prose preamble before the first real entry name.  Split on the last
     occurrence of a known terminator and keep the trailing portion so the
     first regex match starts at the entry name rather than the preamble.
+
+    If the stripped tail contains no entry-shaped match, the caller will log
+    a warning (see `_parse_faq_section`) so preamble-shape drift is visible.
     """
     for sep in _PREAMBLE_SEPS:
         idx = answer.rfind(sep)
@@ -76,14 +79,26 @@ def _extract_faq_answers(soup: BeautifulSoup) -> dict[str, str]:
             answer_text = answer_obj.get("text", "") if isinstance(answer_obj, dict) else ""
             answers[question] = answer_text
         return answers
+    # No FAQPage JSON-LD block at all — likely schema drift.  Log a warning
+    # so monitoring can fire; returning {} here means downstream sections will
+    # be empty, and `parse_pikalytics_page` refuses partially-empty pages.
+    logger.warning("Pikalytics page has no FAQPage JSON-LD block — schema drift likely")
     return {}
 
 
 def _parse_faq_section(answers: dict[str, str], keyword: str) -> list[tuple[str, float]]:
-    """Find the answer whose question contains *keyword* and extract (name, pct) pairs."""
+    """Find the answer whose question contains *keyword* and extract (name, pct) pairs.
+
+    Logs a warning if a matching question exists but produces zero entries,
+    since that combination is the fingerprint of preamble-shape drift (the
+    answer text no longer contains a recognised terminator, or Pikalytics
+    restructured the entry format).
+    """
+    matched = False
     for question, text in answers.items():
         if keyword not in question:
             continue
+        matched = True
         results: list[tuple[str, float]] = []
         # The regex percentage group is a strict decimal, so float() cannot
         # raise here — no silent swallow path is possible.
@@ -93,19 +108,39 @@ def _parse_faq_section(answers: dict[str, str], keyword: str) -> list[tuple[str,
                 results.append((name, float(m.group(2))))
         if results:
             return results
+    if matched:
+        logger.warning(
+            "Pikalytics FAQ section %r matched a question but yielded zero entries "
+            "— possible preamble or entry-format drift",
+            keyword,
+        )
+    else:
+        logger.warning("Pikalytics FAQ section %r found no matching question", keyword)
     return []
 
 
 def parse_pikalytics_page(html: str, pokemon_slug: str) -> dict[str, Any] | None:
     """Parse a Pikalytics championspreview page into a usage dict.
 
-    Returns None for empty or 404-style pages.  Returned dict has keys:
-      pokemon, usage_percent, rank, raw_count,
-      moves, items, abilities, teammates
+    Returns None when the page has no extractable signal.  Returned dict has
+    keys: pokemon, usage_percent, rank, raw_count,
+    moves, items, abilities, teammates.
+
+    ``pokemon`` is set to ``pokemon_slug`` verbatim — callers must ensure
+    the slug equals ``normalize_pokemon_id(display_name)`` or downstream
+    ``get_champions_usage(pokemon=...)`` lookups will miss.
+
+    The three distinct failure modes (empty body, no FAQ block, zero signal)
+    are logged with dedicated warnings so operators can distinguish schema
+    drift from legitimate empty pages.  A real HTTP 404 does not reach this
+    function — ``fetch_text_resilient`` raises before we see the body.
     """
     if not html or len(html.strip()) < 200:
-        return None
-    if "Not Found" in html[:500]:
+        logger.warning(
+            "Pikalytics page %r: HTML too short (len=%d) — treating as empty",
+            pokemon_slug,
+            len(html or ""),
+        )
         return None
 
     soup = BeautifulSoup(html, "html.parser")
@@ -125,8 +160,16 @@ def parse_pikalytics_page(html: str, pokemon_slug: str) -> dict[str, Any] | None
     abilities = _parse_faq_section(faq, "abilit")
     teammates = _parse_faq_section(faq, "teammate")
 
-    # Require at least one signal to consider the page valid
+    # Require at least one signal to consider the page valid.  Zero signal
+    # after reaching this point means either the FAQPage block is missing
+    # (logged in `_extract_faq_answers`) or every section drifted
+    # simultaneously.  Refuse the page so the caller can skip the store and
+    # preserve the prior snapshot.
     if usage_percent is None and not moves and not items and not abilities:
+        logger.warning(
+            "Pikalytics page %r: no usage signal extracted — refusing parsed dict",
+            pokemon_slug,
+        )
         return None
 
     return {
@@ -143,7 +186,9 @@ def parse_pikalytics_page(html: str, pokemon_slug: str) -> dict[str, Any] | None
 
 PIKALYTICS_URL_TEMPLATE = "https://www.pikalytics.com/pokedex/championspreview/{slug}"
 
-# Known Champions Pokemon with Pikalytics data (as of 2026-04-08)
+# Seed list of Champions Pokemon slugs Pikalytics exposes.  Extend as the
+# format evolves; the fetcher takes an explicit `slugs` override so callers
+# can probe new entries without editing this file.
 PIKALYTICS_POKEMON_SLUGS = [
     "incineroar",
     "sneasler",

@@ -261,3 +261,62 @@ class TestSuggestChampionsSpSpread:
         )
         assert "error" not in result
         assert result["success"] is True
+
+    @patch(
+        "smogon_vgc_mcp.tools.champions_calculator._get_champions_base_stats",
+        new_callable=AsyncMock,
+    )
+    async def test_invalid_nature_rejected(self, mock_lookup, mcp_server: FastMCP):
+        """Regression: bad nature must fail loudly, not silently drop final stats."""
+        mock_lookup.return_value = TEST_VENUSAUR
+        register_champions_calculator_tools(mcp_server)
+        tool = mcp_server._tool_manager._tools["suggest_champions_sp_spread"]
+        result = await tool.run(
+            arguments={
+                "pokemon": "Venusaur",
+                "nature": "Spicy",  # not a real nature
+                "goals": [{"type": "maximize", "stat": "spa"}],
+            },
+        )
+        assert "error" in result
+        # Must not have silently run the optimizer with a bad nature.
+        assert "sp_spread" not in result
+
+    @patch(
+        "smogon_vgc_mcp.tools.champions_calculator._get_champions_base_stats",
+        new_callable=AsyncMock,
+    )
+    async def test_invalid_speed_target_rejected(self, mock_lookup, mcp_server: FastMCP):
+        """Regression: non-numeric target_speed must return a structured error,
+        not raise ValueError out of the tool handler."""
+        mock_lookup.return_value = TEST_VENUSAUR
+        register_champions_calculator_tools(mcp_server)
+        tool = mcp_server._tool_manager._tools["suggest_champions_sp_spread"]
+        result = await tool.run(
+            arguments={
+                "pokemon": "Venusaur",
+                "nature": "Modest",
+                "goals": [{"type": "speed", "target_speed": "fast", "mode": "outspeed"}],
+            },
+        )
+        assert "error" in result
+        assert "target_speed" in result["error"]
+
+    @patch(
+        "smogon_vgc_mcp.tools.champions_calculator._get_champions_base_stats",
+        new_callable=AsyncMock,
+    )
+    async def test_invalid_speed_mode_rejected(self, mock_lookup, mcp_server: FastMCP):
+        """Regression: unknown speed mode must return a structured error."""
+        mock_lookup.return_value = TEST_VENUSAUR
+        register_champions_calculator_tools(mcp_server)
+        tool = mcp_server._tool_manager._tools["suggest_champions_sp_spread"]
+        result = await tool.run(
+            arguments={
+                "pokemon": "Venusaur",
+                "nature": "Modest",
+                "goals": [{"type": "speed", "target_speed": 100, "mode": "sideways"}],
+            },
+        )
+        assert "error" in result
+        assert "mode" in result["error"]

@@ -1511,17 +1511,22 @@ async def search_champions_pokemon_by_type(
 
 
 def _row_to_champions_move(row: aiosqlite.Row) -> ChampionsDexMove:
-    """Convert a DB row to a ChampionsDexMove dataclass."""
+    """Convert a DB row to a ChampionsDexMove dataclass.
+
+    `num`, `pp`, and `priority` are passed through as-is (including NULL).
+    Do not coerce NULL to 0 here — doing so masks genuine NULLs as real
+    values and hides DB schema drift behind plausible numeric defaults.
+    """
     return ChampionsDexMove(
         id=row["id"],
-        num=row["num"] or 0,
+        num=row["num"],
         name=row["name"],
         type=row["type"],
         category=row["category"],
         base_power=row["base_power"],
         accuracy=row["accuracy"],
-        pp=row["pp"] or 0,
-        priority=row["priority"] or 0,
+        pp=row["pp"],
+        priority=row["priority"],
         target=row["target"],
         description=row["description"],
         short_desc=row["short_desc"],

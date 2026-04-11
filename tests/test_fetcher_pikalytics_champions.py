@@ -345,3 +345,77 @@ async def test_fetch_and_store_orchestrator_records_fetch_errors(
     fetch_errors = [e for e in result["errors"] if e["slug"] != "store"]
     assert len(fetch_errors) == 2
     assert all("simulated network failure" in e["message"] for e in fetch_errors)
+
+
+# -----------------------------------------------------------------------------
+# Regression tests for Cycle 1 review findings
+# -----------------------------------------------------------------------------
+
+
+def test_parse_empty_html_returns_none_with_log(caplog: pytest.LogCaptureFixture) -> None:
+    """Short/empty HTML must log a warning and return None (not silently drop)."""
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="smogon_vgc_mcp.fetcher.pikalytics_champions"):
+        result = parse_pikalytics_page("", pokemon_slug="incineroar")
+    assert result is None
+    assert any("HTML too short" in r.message for r in caplog.records)
+
+
+def test_parse_no_faq_block_logs_and_returns_none(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A long body with no FAQPage JSON-LD block must log schema-drift warning."""
+    import logging
+
+    # No <script type="application/ld+json"> at all.
+    html = "<html><body>" + ("<p>lorem ipsum</p>" * 50) + "</body></html>"
+    with caplog.at_level(logging.WARNING, logger="smogon_vgc_mcp.fetcher.pikalytics_champions"):
+        result = parse_pikalytics_page(html, pokemon_slug="incineroar")
+    assert result is None
+    # Expect the no-FAQ-block warning AND the no-signal warning.
+    messages = [r.message for r in caplog.records]
+    assert any("no FAQPage JSON-LD block" in m for m in messages)
+    assert any("no usage signal extracted" in m for m in messages)
+
+
+def test_parse_malformed_json_ld_logs_and_returns_none(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Corrupt JSON-LD block must be logged and not silently yield empty sections."""
+    import logging
+
+    html = (
+        "<html><body>"
+        + ("<p>filler</p>" * 30)
+        + '<script type="application/ld+json">{not json}</script>'
+        + "</body></html>"
+    )
+    with caplog.at_level(logging.WARNING, logger="smogon_vgc_mcp.fetcher.pikalytics_champions"):
+        result = parse_pikalytics_page(html, pokemon_slug="incineroar")
+    assert result is None
+    assert any("failed to parse" in r.message for r in caplog.records)
+
+
+def test_parse_soft_not_found_no_longer_dropped() -> None:
+    """The old fragile `"Not Found" in html[:500]` check must be gone.
+
+    Any page whose early bytes contain the words "Not Found" (e.g. a page whose
+    navigation links to a "Page Not Found" help article) used to be silently
+    dropped.  With the check removed, such pages parse normally when they have
+    a real FAQPage block and a usage-percent signal.
+    """
+    faq_html = (
+        "<html><body>"
+        '<a href="/help">Page Not Found help</a>'
+        "<p>Usage Percent 35.8%</p>"
+        '<script type="application/ld+json">'
+        '{"@type": "FAQPage", "mainEntity": [{"@type": "Question", '
+        '"name": "What moves does Incineroar use?", "acceptedAnswer": '
+        '{"@type": "Answer", "text": "The top moves are Fake Out (50.0%)"}}]}'
+        "</script>" + ("<p>padding</p>" * 20) + "</body></html>"
+    )
+    result = parse_pikalytics_page(faq_html, pokemon_slug="incineroar")
+    assert result is not None
+    assert result["usage_percent"] == pytest.approx(35.8)
+    assert ("Fake Out", 50.0) in result["moves"]

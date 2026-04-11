@@ -18,10 +18,8 @@ def register_champions_usage_tools(mcp: FastMCP) -> None:
         """Get Pikalytics usage statistics for a Pokemon in Champions format.
 
         Returns usage %, rank, top moves, items, abilities, and teammates
-        for the given ELO cutoff.
-
-        Only "0+" is currently supported; higher-ELO cutoffs will be added
-        once Pikalytics exposes them via query parameter.
+        for the given ELO cutoff.  Accepted cutoffs are sourced from
+        ``fetcher.pikalytics_champions.ELO_CUTOFFS``.
 
         Examples:
         - "Incineroar usage stats in Champions"
@@ -29,7 +27,7 @@ def register_champions_usage_tools(mcp: FastMCP) -> None:
 
         Args:
             pokemon: Pokemon name (e.g., "Incineroar", "Garchomp").
-            elo_cutoff: ELO cutoff. Currently only "0+" is supported.
+            elo_cutoff: ELO cutoff; see ELO_CUTOFFS for the live list.
         """
         if elo_cutoff not in ELO_CUTOFFS:
             return make_error_response(
