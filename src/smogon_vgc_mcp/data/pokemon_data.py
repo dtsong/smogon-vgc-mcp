@@ -95,7 +95,7 @@ _types: dict[str, list[str]] | None = None
 
 
 def _get_data_path() -> Path:
-    return Path(__file__).parent.parent.parent.parent / "data"
+    return Path(__file__).parent
 
 
 def _load_base_stats() -> dict[str, dict[str, int]]:
@@ -104,12 +104,8 @@ def _load_base_stats() -> dict[str, dict[str, int]]:
         return _base_stats
 
     path = _get_data_path() / "base_stats.json"
-    try:
-        with open(path) as f:
-            _base_stats = json.load(f)
-    except FileNotFoundError:
-        _base_stats = {}
-
+    with open(path) as f:
+        _base_stats = json.load(f)
     return _base_stats
 
 
@@ -119,12 +115,8 @@ def _load_types() -> dict[str, list[str]]:
         return _types
 
     path = _get_data_path() / "types.json"
-    try:
-        with open(path) as f:
-            _types = json.load(f)
-    except FileNotFoundError:
-        _types = {}
-
+    with open(path) as f:
+        _types = json.load(f)
     return _types
 
 

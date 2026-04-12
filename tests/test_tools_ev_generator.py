@@ -6,40 +6,6 @@ import pytest
 
 from smogon_vgc_mcp.calculator.ev_optimizer import GoalResult, OptimizedSpread
 
-_TEST_BASE_STATS = {
-    "hp": 95,
-    "atk": 115,
-    "def": 90,
-    "spa": 80,
-    "spd": 90,
-    "spe": 60,
-}
-
-
-@pytest.fixture(autouse=True)
-def _mock_base_stats_lookup():
-    """Stub get_base_stats so EV generator tests don't depend on seeded data files."""
-    known = {
-        "incineroar",
-        "fluttermane",
-        "amoonguss",
-        "torkoal",
-        "dondozo",
-        "urshifurapidstrike",
-    }
-
-    def fake_get_base_stats(name: str):
-        if not name:
-            return None
-        normalized = name.lower().replace(" ", "").replace("-", "")
-        return _TEST_BASE_STATS if normalized in known else None
-
-    with patch(
-        "smogon_vgc_mcp.utils.validators.get_base_stats",
-        side_effect=fake_get_base_stats,
-    ):
-        yield
-
 
 class MockFastMCP:
     """Mock FastMCP to capture registered tools."""
