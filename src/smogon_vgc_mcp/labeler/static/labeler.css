@@ -1,0 +1,70 @@
+:root {
+  --bg: #fafafa;
+  --panel: #fff;
+  --border: #d0d7de;
+  --ink: #1f2328;
+  --muted: #656d76;
+  --accent: #0969da;
+  --ok: #1a7f37;
+  --warn: #bf8700;
+  --bad: #cf222e;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; font-family: -apple-system, system-ui, sans-serif; color: var(--ink); background: var(--bg); }
+body { display: flex; flex-direction: column; }
+header { padding: 0.5rem 1rem; border-bottom: 1px solid var(--border); background: var(--panel); display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+header h1 { font-size: 1rem; margin: 0; }
+.controls { display: flex; align-items: center; gap: 0.75rem; flex: 1; flex-wrap: wrap; }
+.controls label { display: flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; }
+select, input, textarea, button { font: inherit; padding: 0.25rem 0.4rem; border: 1px solid var(--border); border-radius: 4px; background: #fff; }
+button { cursor: pointer; }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+button.primary:hover { filter: brightness(1.1); }
+#progress { color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+
+main { flex: 1; display: grid; grid-template-columns: 240px 1fr 1fr; min-height: 0; }
+aside, section { border-right: 1px solid var(--border); overflow: auto; }
+section:last-child { border-right: none; }
+
+#article-list { padding: 0; background: var(--panel); }
+.article-item { padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); cursor: pointer; font-size: 0.85rem; }
+.article-item:hover { background: #f0f3f6; }
+.article-item.active { background: #ddf4ff; }
+.article-item .title { font-weight: 500; color: var(--ink); display: block; }
+.article-item .meta { color: var(--muted); font-size: 0.75rem; }
+.article-item .badge { display: inline-block; padding: 0 0.35rem; border-radius: 2px; margin-right: 0.25rem; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; }
+.badge.unlabeled { background: #eaeef2; color: var(--muted); }
+.badge.in_progress { background: #fff8c5; color: var(--warn); }
+.badge.labeled { background: #dafbe1; color: var(--ok); }
+.badge.skipped { background: #ffebe9; color: var(--bad); }
+
+#article-pane { display: flex; flex-direction: column; background: var(--panel); }
+#article-meta { padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); font-size: 0.8rem; color: var(--muted); }
+#article-meta a { color: var(--accent); text-decoration: none; }
+#article-body { flex: 1; border: 0; width: 100%; background: #fff; }
+
+#editor-pane { display: flex; flex-direction: column; background: var(--panel); }
+#editor-header { padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
+#editor-header h2 { margin: 0; font-size: 1rem; }
+#editor-status { font-size: 0.75rem; color: var(--muted); }
+#sets-container { flex: 1; overflow: auto; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.set-card { border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem; background: #fff; }
+.set-row { display: flex; gap: 0.25rem; flex-wrap: wrap; align-items: center; margin-bottom: 0.25rem; }
+.set-row input { min-width: 0; }
+.set-row .f-pokemon { flex: 2 1 120px; }
+.set-row .f-ability, .set-row .f-item, .set-row .f-nature, .set-row .f-tera { flex: 1 1 90px; }
+.set-row .f-level { width: 3.5rem; }
+.moves-row input { flex: 1 1 100px; }
+.evs-row { font-size: 0.8rem; }
+.ev-label { font-weight: 600; color: var(--muted); width: 2.5rem; }
+.evs-row input { width: 3.5rem; }
+.ev-total { font-variant-numeric: tabular-nums; color: var(--muted); margin-left: auto; font-weight: 600; }
+.ev-total.over { color: var(--bad); }
+.f-snippet { width: 100%; font-family: ui-monospace, monospace; font-size: 0.75rem; padding: 0.4rem; resize: vertical; min-height: 2.5rem; margin-top: 0.25rem; }
+.remove-set { background: transparent; color: var(--muted); border: 0; font-size: 1.2rem; line-height: 1; padding: 0 0.35rem; }
+.remove-set:hover { color: var(--bad); }
+.editor-actions { padding: 0.5rem 0.75rem; border-top: 1px solid var(--border); display: flex; gap: 0.5rem; align-items: center; }
+.editor-actions .spacer { flex: 1; }
+#save-feedback { margin: 0; padding: 0.35rem 0.75rem; font-size: 0.75rem; color: var(--muted); white-space: pre-wrap; }
+#save-feedback.error { color: var(--bad); }
+#save-feedback.ok { color: var(--ok); }

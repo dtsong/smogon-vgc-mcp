@@ -20,10 +20,16 @@ dependencies = [
 
 [project.optional-dependencies]
 browser = ["playwright>=1.40.0"]
+labeler = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.27.0",
+    "jinja2>=3.1.0",
+]
 
 [project.scripts]
 smogon-vgc-mcp = "smogon_vgc_mcp.entry.stdio:main"
 vgc-build = "vgc_agent.cli:main"
+vgc-label = "smogon_vgc_mcp.labeler.cli:main"
 
 [dependency-groups]
 dev = [
