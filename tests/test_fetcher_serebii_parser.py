@@ -1,9 +1,6 @@
 """Tests for fetcher/champions_dex.py — Serebii Champions HTML parser."""
 
-import pytest
-
 from smogon_vgc_mcp.fetcher.champions_dex import parse_serebii_pokemon_page
-
 
 # ---------------------------------------------------------------------------
 # HTML fixtures: minimal but realistic fragments modelled after the real
@@ -302,9 +299,16 @@ class TestReturnSchema:
     """Tests that the returned dict has all expected keys."""
 
     EXPECTED_KEYS = {
-        "id", "num", "name", "types",
-        "base_stats", "abilities", "ability_hidden",
-        "height_m", "weight_kg", "mega_forms",
+        "id",
+        "num",
+        "name",
+        "types",
+        "base_stats",
+        "abilities",
+        "ability_hidden",
+        "height_m",
+        "weight_kg",
+        "mega_forms",
     }
 
     def test_all_keys_present(self):

@@ -1,0 +1,342 @@
+"""Tests for Serebii Champions move changes scraper."""
+
+from pathlib import Path
+
+import aiosqlite
+import pytest
+
+from smogon_vgc_mcp.database.schema import SCHEMA
+from smogon_vgc_mcp.fetcher.champions_moves import (
+    ParseError,
+    _parse_int_or_none,
+    fetch_and_store_champions_moves,
+    parse_serebii_moves_page,
+    store_champions_moves,
+)
+from smogon_vgc_mcp.resilience.errors import (
+    ErrorCategory,
+    FetchResult,
+    ServiceError,
+)
+
+FIXTURE = Path(__file__).parent / "fixtures" / "serebii_champions_moves.html"
+
+
+@pytest.fixture
+def fixture_html() -> str:
+    return FIXTURE.read_text(encoding="latin-1")
+
+
+def test_parse_returns_list_of_moves(fixture_html: str) -> None:
+    moves = parse_serebii_moves_page(fixture_html)
+    assert isinstance(moves, list)
+    assert len(moves) > 0
+
+
+def test_parsed_moves_have_required_fields(fixture_html: str) -> None:
+    moves = parse_serebii_moves_page(fixture_html)
+    for m in moves:
+        assert m["id"]
+        assert m["name"]
+        assert m["type"]
+        assert m["category"] in ("Physical", "Special", "Status")
+        assert "base_power" in m
+        assert "accuracy" in m
+        assert "pp" in m
+
+
+def test_parse_handles_empty_html() -> None:
+    assert parse_serebii_moves_page("") == []
+    assert parse_serebii_moves_page("<html></html>") == []
+
+
+def test_parse_no_tab_tables_returns_empty() -> None:
+    html = "<html><body><table class='other'></table></body></html>"
+    assert parse_serebii_moves_page(html) == []
+
+
+def test_parse_known_move_has_expected_fields(fixture_html: str) -> None:
+    # Iron Head: Steel / Physical / 80 base power / 16 PP — stable standard values.
+    moves = parse_serebii_moves_page(fixture_html)
+    iron_head = next((m for m in moves if m["name"] == "Iron Head"), None)
+    assert iron_head is not None, "Iron Head not found in parsed moves"
+    assert iron_head["type"] == "Steel"
+    assert iron_head["category"] == "Physical"
+    assert iron_head["base_power"] == 80
+    assert iron_head["pp"] == 16
+
+
+@pytest.mark.asyncio
+async def test_store_inserts_moves() -> None:
+    moves = [
+        {
+            "id": "dragonclaw",
+            "name": "Dragon Claw",
+            "type": "Dragon",
+            "category": "Physical",
+            "base_power": 85,
+            "accuracy": 100,
+            "pp": 15,
+            "priority": 0,
+            "target": None,
+            "description": "A slashing attack with sharp claws.",
+            "short_desc": "A slashing attack with sharp claws.",
+        }
+    ]
+    async with aiosqlite.connect(":memory:") as db:
+        await db.executescript(SCHEMA)
+        count = await store_champions_moves(db, moves)
+        assert count == 1
+        async with db.execute(
+            "SELECT name, type, base_power FROM champions_dex_moves WHERE id = ?",
+            ("dragonclaw",),
+        ) as cursor:
+            row = await cursor.fetchone()
+    assert row == ("Dragon Claw", "Dragon", 85)
+
+
+@pytest.mark.asyncio
+async def test_store_replaces_existing() -> None:
+    async with aiosqlite.connect(":memory:") as db:
+        await db.executescript(SCHEMA)
+        await store_champions_moves(
+            db,
+            [
+                {
+                    "id": "x",
+                    "name": "X",
+                    "type": "Fire",
+                    "category": "Physical",
+                    "base_power": 50,
+                    "accuracy": 100,
+                    "pp": 10,
+                    "priority": 0,
+                    "target": None,
+                    "description": None,
+                    "short_desc": None,
+                }
+            ],
+        )
+        await store_champions_moves(
+            db,
+            [
+                {
+                    "id": "x",
+                    "name": "X",
+                    "type": "Fire",
+                    "category": "Physical",
+                    "base_power": 75,
+                    "accuracy": 100,
+                    "pp": 10,
+                    "priority": 0,
+                    "target": None,
+                    "description": None,
+                    "short_desc": None,
+                }
+            ],
+        )
+        async with db.execute(
+            "SELECT COUNT(*), MAX(base_power) FROM champions_dex_moves"
+        ) as cursor:
+            row = await cursor.fetchone()
+    assert row == (1, 75)
+
+
+@pytest.mark.asyncio
+async def test_store_refuses_empty_list_and_preserves_rows() -> None:
+    """Passing [] to store_champions_moves must not wipe existing rows.
+
+    Regression guard: earlier revisions unconditionally issued
+    `DELETE FROM champions_dex_moves` before INSERT, so a parser regression
+    (e.g. Serebii layout change) that returned [] would silently erase the
+    entire table.
+    """
+    async with aiosqlite.connect(":memory:") as db:
+        await db.executescript(SCHEMA)
+        await store_champions_moves(
+            db,
+            [
+                {
+                    "id": "ironhead",
+                    "name": "Iron Head",
+                    "type": "Steel",
+                    "category": "Physical",
+                    "base_power": 80,
+                    "accuracy": 100,
+                    "pp": 15,
+                    "priority": 0,
+                    "target": None,
+                    "description": None,
+                    "short_desc": None,
+                }
+            ],
+        )
+        with pytest.raises(ValueError, match="empty Champions moves list"):
+            await store_champions_moves(db, [])
+        async with db.execute("SELECT COUNT(*) FROM champions_dex_moves") as cursor:
+            (count,) = await cursor.fetchone()
+    assert count == 1, "existing rows must survive a refused empty store"
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_store_orchestrator_skips_empty_parser_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When the parser returns [], the orchestrator must not wipe the table."""
+    db_path = tmp_path / "serebii_empty.db"
+
+    async def fake_fetch(url: str, service: str) -> FetchResult[str]:
+        # HTML long enough to pass the length gate but with no tab table.
+        return FetchResult.ok("<html><body>" + "x" * 200 + "</body></html>")
+
+    monkeypatch.setattr(
+        "smogon_vgc_mcp.fetcher.champions_moves.fetch_text_resilient",
+        fake_fetch,
+    )
+
+    result = await fetch_and_store_champions_moves(db_path=db_path)
+
+    assert result["fetched"] == 0
+    assert result["stored"] == 0
+    assert result["errors"], "empty parse must be surfaced as an error"
+    assert any("preserved" in e["message"] for e in result["errors"])
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_store_orchestrator_mocks_network(
+    tmp_path: Path, fixture_html: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Orchestrator fetches, parses, and persists Serebii moves end-to-end."""
+    db_path = tmp_path / "serebii.db"
+
+    async def fake_fetch(url: str, service: str) -> FetchResult[str]:
+        return FetchResult.ok(fixture_html)
+
+    monkeypatch.setattr(
+        "smogon_vgc_mcp.fetcher.champions_moves.fetch_text_resilient",
+        fake_fetch,
+    )
+
+    result = await fetch_and_store_champions_moves(db_path=db_path)
+
+    assert result["fetched"] > 0
+    assert result["stored"] == result["fetched"]
+    assert result["errors"] == []
+    assert result["dry_run"] is False
+
+    async with aiosqlite.connect(db_path) as db:
+        async with db.execute("SELECT COUNT(*) FROM champions_dex_moves") as cursor:
+            (count,) = await cursor.fetchone()
+    assert count == result["stored"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_store_orchestrator_records_fetch_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fetch failure short-circuits with an error entry, no DB writes."""
+    db_path = tmp_path / "serebii_fail.db"
+
+    async def fake_fetch(url: str, service: str) -> FetchResult[str]:
+        return FetchResult.fail(
+            ServiceError(
+                category=ErrorCategory.NETWORK,
+                service="serebii",
+                message="down",
+            )
+        )
+
+    monkeypatch.setattr(
+        "smogon_vgc_mcp.fetcher.champions_moves.fetch_text_resilient",
+        fake_fetch,
+    )
+
+    result = await fetch_and_store_champions_moves(db_path=db_path)
+
+    assert result["fetched"] == 0
+    assert result["stored"] == 0
+    assert len(result["errors"]) == 1
+    # Real fetch error message is propagated verbatim so debugging doesn't
+    # require re-running against a live server.
+    assert result["errors"][0]["message"] == "down"
+
+
+# ---------------------------------------------------------------------------
+# Numeric-cell sentinel vs. garbage handling
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("text", ["", "--", "—", "-", "  "])
+def test_parse_int_or_none_accepts_sentinels(text: str) -> None:
+    """Legitimate "no value" cells return None without error."""
+    assert _parse_int_or_none(text, field="pp") is None
+
+
+def test_parse_int_or_none_always_hits_sentinel_only_in_accuracy() -> None:
+    """101 is an accuracy-only sentinel; same value elsewhere is a real int."""
+    assert _parse_int_or_none("101", field="accuracy") is None
+    assert _parse_int_or_none("101", field="base_power") == 101
+
+
+def test_parse_int_or_none_raises_on_garbage() -> None:
+    """Unparseable text must raise so the row is skipped loudly, not silently."""
+    with pytest.raises(ParseError):
+        _parse_int_or_none("100 (+10)", field="pp")
+    with pytest.raises(ParseError):
+        _parse_int_or_none("N/A", field="accuracy")
+
+
+# ---------------------------------------------------------------------------
+# Parser skip-reason tracking (layout regression early warning)
+# ---------------------------------------------------------------------------
+
+
+def test_parse_tracks_unexpected_skip_reasons() -> None:
+    """A Champions row with a broken type image is counted, not silently dropped.
+
+    Regression: without skip tracking, a Serebii icon-filename change could
+    drop every Fairy move with zero visible errors.
+    """
+    # Type image uses a .svg extension — matching a hypothetical Serebii
+    # layout change the _TYPE_SRC_RE pattern (.gif|.png) won't catch.
+    html = """
+    <html><body><table class="tab">
+      <tr>
+        <td><a href="/moves/bad">Bad Move</a></td>
+        <td>Champions</td>
+        <td><img src="/i/type/fire.svg"></td>
+        <td><img src="/i/type/physical.gif"></td>
+        <td>10</td><td>80</td><td>100</td><td>does stuff</td><td>--</td>
+      </tr>
+    </table></body></html>
+    """ + (" " * 200)
+    skip_reasons: dict[str, int] = {}
+    moves = parse_serebii_moves_page(html, skip_reasons=skip_reasons)
+    assert moves == []
+    assert skip_reasons == {"missing_type_img": 1}
+
+
+def test_parse_tracks_unparseable_numeric_skip() -> None:
+    """Garbage PP text surfaces as an unparseable_numeric skip, not a silent drop."""
+    html = """
+    <html><body><table class="tab">
+      <tr>
+        <td><a href="/moves/x">X Move</a></td>
+        <td>Champions</td>
+        <td><img src="/i/type/fire.gif"></td>
+        <td><img src="/i/type/physical.gif"></td>
+        <td>N/A</td><td>80</td><td>100</td><td>does stuff</td><td>--</td>
+      </tr>
+    </table></body></html>
+    """ + (" " * 200)
+    skip_reasons: dict[str, int] = {}
+    moves = parse_serebii_moves_page(html, skip_reasons=skip_reasons)
+    assert moves == []
+    assert skip_reasons == {"unparseable_numeric": 1}
+
+
+def test_parse_slugs_are_unique(fixture_html: str) -> None:
+    """Slug collisions would silently overwrite moves via INSERT OR REPLACE."""
+    moves = parse_serebii_moves_page(fixture_html)
+    slugs = [m["id"] for m in moves]
+    assert len(slugs) == len(set(slugs)), "duplicate move slugs would cause silent data loss"

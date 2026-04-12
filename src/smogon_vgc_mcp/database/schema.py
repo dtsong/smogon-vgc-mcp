@@ -1,6 +1,8 @@
 """SQLite database schema for Smogon VGC stats."""
 
 import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import aiosqlite
@@ -334,6 +336,67 @@ CREATE INDEX IF NOT EXISTS idx_champ_pokemon_is_mega ON champions_dex_pokemon(is
 CREATE INDEX IF NOT EXISTS idx_champ_moves_type ON champions_dex_moves(type);
 CREATE INDEX IF NOT EXISTS idx_champ_moves_category ON champions_dex_moves(category);
 CREATE INDEX IF NOT EXISTS idx_champ_abilities_name ON champions_dex_abilities(name);
+
+-- =============================================================================
+-- Champions usage data (from Pikalytics)
+-- =============================================================================
+
+-- Pikalytics snapshots are replaced in-place per (source, elo_cutoff) on re-scrape.
+-- Unlike the main `snapshots` table (which is keyed by month), we don't accumulate
+-- historical Champions usage — the store layer deletes the prior snapshot before
+-- inserting a new one. Add a date column here if historical accumulation is needed.
+CREATE TABLE IF NOT EXISTS champions_usage_snapshots (
+    id INTEGER PRIMARY KEY,
+    elo_cutoff TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'pikalytics',
+    fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(source, elo_cutoff)
+);
+
+CREATE TABLE IF NOT EXISTS champions_pokemon_usage (
+    id INTEGER PRIMARY KEY,
+    snapshot_id INTEGER REFERENCES champions_usage_snapshots(id) ON DELETE CASCADE,
+    pokemon TEXT NOT NULL,
+    usage_percent REAL,
+    rank INTEGER,
+    raw_count INTEGER,
+    UNIQUE(snapshot_id, pokemon)
+);
+
+CREATE TABLE IF NOT EXISTS champions_usage_moves (
+    id INTEGER PRIMARY KEY,
+    pokemon_usage_id INTEGER REFERENCES champions_pokemon_usage(id) ON DELETE CASCADE,
+    move TEXT NOT NULL,
+    percent REAL
+);
+
+CREATE TABLE IF NOT EXISTS champions_usage_items (
+    id INTEGER PRIMARY KEY,
+    pokemon_usage_id INTEGER REFERENCES champions_pokemon_usage(id) ON DELETE CASCADE,
+    item TEXT NOT NULL,
+    percent REAL
+);
+
+CREATE TABLE IF NOT EXISTS champions_usage_abilities (
+    id INTEGER PRIMARY KEY,
+    pokemon_usage_id INTEGER REFERENCES champions_pokemon_usage(id) ON DELETE CASCADE,
+    ability TEXT NOT NULL,
+    percent REAL
+);
+
+CREATE TABLE IF NOT EXISTS champions_usage_teammates (
+    id INTEGER PRIMARY KEY,
+    pokemon_usage_id INTEGER REFERENCES champions_pokemon_usage(id) ON DELETE CASCADE,
+    teammate TEXT NOT NULL,
+    percent REAL
+);
+
+CREATE INDEX IF NOT EXISTS idx_champ_usage_snap_elo
+    ON champions_usage_snapshots(elo_cutoff);
+CREATE INDEX IF NOT EXISTS idx_champ_pokemon_usage_name
+    ON champions_pokemon_usage(pokemon);
+CREATE INDEX IF NOT EXISTS idx_champ_pokemon_usage_snap
+    ON champions_pokemon_usage(snapshot_id);
 """
 
 # =============================================================================
@@ -506,14 +569,20 @@ async def init_database(db_path: Path | None = None) -> None:
         await db.commit()
 
 
-def get_connection(db_path: Path | None = None) -> aiosqlite.Connection:
+@asynccontextmanager
+async def get_connection(db_path: Path | None = None) -> AsyncIterator[aiosqlite.Connection]:
     """Get a database connection context manager.
 
     Usage:
         async with get_connection() as db:
             ...
+
+    Foreign keys are enabled (PRAGMA foreign_keys = ON) on every connection so
+    that ON DELETE CASCADE constraints are enforced in production.
     """
     if db_path is None:
         db_path = get_db_path()
 
-    return aiosqlite.connect(db_path, timeout=DB_TIMEOUT)
+    async with aiosqlite.connect(db_path, timeout=DB_TIMEOUT) as db:
+        await db.execute("PRAGMA foreign_keys = ON")
+        yield db

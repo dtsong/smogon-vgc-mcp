@@ -1,7 +1,5 @@
 """Tests for fetcher/champions_pokemon_list.py — static Champions Pokemon list."""
 
-import pytest
-
 from smogon_vgc_mcp.fetcher.champions_pokemon_list import (
     ALL_POKEMON,
     BASE_POKEMON,
@@ -56,8 +54,7 @@ class TestMegaPokemonList:
         base_slugs = {slug for slug, _ in BASE_POKEMON}
         for mega_slug, _, base_slug in MEGA_POKEMON:
             assert base_slug in base_slugs, (
-                f"Mega form '{mega_slug}' has base_slug '{base_slug}' "
-                f"not found in BASE_POKEMON"
+                f"Mega form '{mega_slug}' has base_slug '{base_slug}' not found in BASE_POKEMON"
             )
 
     def test_no_duplicate_mega_slugs(self):
