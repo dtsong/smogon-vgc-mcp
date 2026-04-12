@@ -562,10 +562,13 @@ async def init_database(db_path: Path | None = None) -> None:
     # Ensure directory exists
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
+    from smogon_vgc_mcp.labeler.schema import migrate_add_labeler_tables
+
     async with aiosqlite.connect(db_path, timeout=DB_TIMEOUT) as db:
         await db.executescript(SCHEMA)
         await migrate_add_format_column(db)
         await migrate_add_nugget_bridge_tables(db)
+        await migrate_add_labeler_tables(db)
         await db.commit()
 
 

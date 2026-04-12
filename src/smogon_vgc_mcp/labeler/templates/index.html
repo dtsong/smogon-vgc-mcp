@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>VGC Historical Labeler</title>
+<link rel="stylesheet" href="/static/labeler.css">
+</head>
+<body>
+<header>
+  <h1>VGC Historical Labeler</h1>
+  <div class="controls">
+    <label>Source
+      <select id="source"></select>
+    </label>
+    <label>Format
+      <select id="format"><option value="">All</option></select>
+    </label>
+    <label>Status
+      <select id="status-filter">
+        <option value="">All</option>
+        <option value="unlabeled">Unlabeled</option>
+        <option value="in_progress">In progress</option>
+        <option value="labeled">Labeled</option>
+        <option value="skipped">Skipped</option>
+      </select>
+    </label>
+    <span id="progress"></span>
+    <button id="prev-unlabeled">← Prev unlabeled</button>
+    <button id="next-unlabeled">Next unlabeled →</button>
+    <button id="stats-toggle">📊 Stats</button>
+  </div>
+</header>
+
+<div id="stats-panel" hidden>
+  <div id="stats-summary"></div>
+  <table id="stats-table"></table>
+</div>
+
+<main>
+  <aside id="article-list"></aside>
+  <section id="article-pane">
+    <div id="article-meta"></div>
+    <iframe id="article-body" sandbox="allow-same-origin"></iframe>
+  </section>
+  <section id="editor-pane">
+    <div id="editor-header">
+      <h2 id="editor-title">No article loaded</h2>
+      <div id="editor-status"></div>
+    </div>
+    <div id="sets-container"></div>
+    <div class="editor-actions">
+      <button id="add-set">+ Add set</button>
+      <button id="run-prefill" title="Ask Tier-1 extractor to pre-fill this article">✨ Pre-fill</button>
+      <span class="spacer"></span>
+      <select id="save-status">
+        <option value="labeled">Labeled</option>
+        <option value="in_progress">In progress</option>
+        <option value="skipped">Skipped</option>
+      </select>
+      <button id="save" class="primary">Save</button>
+    </div>
+    <pre id="save-feedback"></pre>
+  </section>
+</main>
+
+<datalist id="dl-pokemon"></datalist>
+<datalist id="dl-moves"></datalist>
+<datalist id="dl-abilities"></datalist>
+<datalist id="dl-items"></datalist>
+<datalist id="dl-natures"></datalist>
+
+<template id="set-template">
+  <div class="set-card">
+    <div class="set-row">
+      <button class="remove-set" title="Remove set">×</button>
+      <input class="f-pokemon" list="dl-pokemon" placeholder="Pokémon">
+      <input class="f-ability" list="dl-abilities" placeholder="Ability">
+      <input class="f-item" list="dl-items" placeholder="Item">
+      <input class="f-nature" list="dl-natures" placeholder="Nature">
+      <input class="f-tera" placeholder="Tera type">
+      <input class="f-level" type="number" min="1" max="100" placeholder="Lv" value="50">
+    </div>
+    <div class="set-row moves-row">
+      <input class="f-move" list="dl-moves" placeholder="Move 1">
+      <input class="f-move" list="dl-moves" placeholder="Move 2">
+      <input class="f-move" list="dl-moves" placeholder="Move 3">
+      <input class="f-move" list="dl-moves" placeholder="Move 4">
+    </div>
+    <div class="set-row evs-row">
+      <span class="ev-label">EVs</span>
+      <input class="f-ev" data-stat="hp" type="number" min="0" max="252" placeholder="HP">
+      <input class="f-ev" data-stat="atk" type="number" min="0" max="252" placeholder="Atk">
+      <input class="f-ev" data-stat="def" type="number" min="0" max="252" placeholder="Def">
+      <input class="f-ev" data-stat="spa" type="number" min="0" max="252" placeholder="SpA">
+      <input class="f-ev" data-stat="spd" type="number" min="0" max="252" placeholder="SpD">
+      <input class="f-ev" data-stat="spe" type="number" min="0" max="252" placeholder="Spe">
+      <span class="ev-total">0</span>
+    </div>
+    <textarea class="f-snippet" placeholder="Raw snippet (verbatim from article, ≤300 chars)" maxlength="300"></textarea>
+  </div>
+</template>
+
+<script src="/static/labeler.js"></script>
+</body>
+</html>
