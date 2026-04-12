@@ -13,7 +13,16 @@ const state = {
   current: null,   // {article, state, label}
   autocomplete: null,
   dirty: false,
+  prefill: { name: "stub", available: false },
+  prefillSnapshot: null, // list of pre-filled set dicts for current article (frozen at pre-fill time)
 };
+
+// Fields we diff between pre-fill and save for the correction dashboard.
+const DIFF_FIELDS = [
+  "pokemon", "ability", "item", "nature", "tera_type",
+  "move1", "move2", "move3", "move4",
+  "ev_hp", "ev_atk", "ev_def", "ev_spa", "ev_spd", "ev_spe", "level",
+];
 
 async function fetchJSON(url, opts = {}) {
   const r = await fetch(url, opts);
@@ -25,11 +34,13 @@ async function fetchJSON(url, opts = {}) {
 }
 
 async function init() {
-  const [sources, formats, ac] = await Promise.all([
+  const [sources, formats, ac, prefill] = await Promise.all([
     fetchJSON("/api/sources"),
     fetchJSON("/api/formats"),
     fetchJSON("/api/autocomplete"),
+    fetchJSON("/api/prefill").catch(() => ({ name: "stub", available: false })),
   ]);
+  state.prefill = prefill;
   const sourceSel = $("#source");
   sources.forEach(s => sourceSel.add(new Option(s, s)));
   sourceSel.value = state.source;
@@ -51,9 +62,17 @@ async function init() {
   $("#save").addEventListener("click", saveLabel);
   $("#prev-unlabeled").addEventListener("click", () => stepUnlabeled(-1));
   $("#next-unlabeled").addEventListener("click", () => stepUnlabeled(+1));
+  $("#run-prefill").addEventListener("click", runPrefill);
+  $("#stats-toggle").addEventListener("click", toggleStats);
   window.addEventListener("beforeunload", e => {
     if (state.dirty) { e.preventDefault(); e.returnValue = ""; }
   });
+
+  const prefillBtn = $("#run-prefill");
+  prefillBtn.disabled = !state.prefill.available;
+  prefillBtn.title = state.prefill.available
+    ? `Ask ${state.prefill.name} to pre-fill this article`
+    : `Pre-fill unavailable (${state.prefill.name}) — set ANTHROPIC_API_KEY`;
 
   await loadArticles();
 }
@@ -100,6 +119,7 @@ async function loadArticle(articleId) {
   if (state.dirty && !confirm("Unsaved changes — discard?")) return;
   const data = await fetchJSON(`/api/articles/${state.source}/${articleId}`);
   state.current = data;
+  state.prefillSnapshot = null;
   renderArticle();
   renderLabel();
   state.dirty = false;
@@ -145,7 +165,7 @@ function renderLabel() {
   }
 }
 
-function addSet(data = {}) {
+function addSet(data = {}, { prefilled = false } = {}) {
   const tmpl = $("#set-template").content.cloneNode(true);
   const card = tmpl.querySelector(".set-card");
   card.querySelector(".f-pokemon").value = data.pokemon || "";
@@ -164,11 +184,29 @@ function addSet(data = {}) {
   card.querySelector(".remove-set").addEventListener("click", () => {
     card.remove(); markDirty();
   });
+
+  if (prefilled) {
+    card.dataset.prefilled = "true";
+    card.querySelectorAll("input, textarea").forEach(inp => {
+      if (inp.value !== "" && inp.value != null) inp.classList.add("prefilled");
+    });
+  }
+
   card.querySelectorAll("input, textarea").forEach(inp => {
-    inp.addEventListener("input", () => { markDirty(); if (inp.classList.contains("f-ev")) updateEvTotal(card); });
+    inp.addEventListener("input", () => {
+      markDirty();
+      // First edit after pre-fill = labeler correction. Flip tint and record.
+      if (inp.classList.contains("prefilled")) {
+        inp.classList.remove("prefilled");
+        inp.classList.add("corrected");
+      }
+      if (inp.classList.contains("f-ev")) updateEvTotal(card);
+    });
   });
+
   $("#sets-container").appendChild(card);
   updateEvTotal(card);
+  return card;
 }
 
 function updateEvTotal(card) {
@@ -209,15 +247,70 @@ function collectSets() {
   }).filter(s => s.pokemon);
 }
 
+function diffAgainstPrefill(sets) {
+  // Compare collected sets to the snapshot the prefiller returned,
+  // index-aligned. Returns {count, fields: {field: totalCorrectedAcrossSets}}
+  // and set_count for denominator in the dashboard.
+  const snapshot = state.prefillSnapshot;
+  if (!snapshot || snapshot.length === 0) return null;
+
+  const fields = Object.fromEntries(DIFF_FIELDS.map(f => [f, 0]));
+  let count = 0;
+  const maxLen = Math.max(sets.length, snapshot.length);
+  for (let i = 0; i < maxLen; i++) {
+    const a = sets[i] || {};
+    const b = snapshot[i] || {};
+    for (const field of DIFF_FIELDS) {
+      const av = a[field] ?? null;
+      const bv = b[field] ?? null;
+      if (av !== bv) { fields[field] += 1; count += 1; }
+    }
+  }
+  return { count, fields, set_count: Math.max(sets.length, snapshot.length) };
+}
+
+async function runPrefill() {
+  if (!state.current || !state.prefill.available) return;
+  const { article } = state.current;
+  const btn = $("#run-prefill");
+  btn.disabled = true;
+  btn.textContent = "✨ Pre-filling…";
+  try {
+    const r = await fetchJSON(`/api/prefill/${state.source}/${article.article_id}`, {
+      method: "POST",
+    });
+    state.prefillSnapshot = r.sets.map(s => ({ ...s }));
+    $("#sets-container").innerHTML = "";
+    if (r.sets.length === 0) {
+      addSet();
+      $("#save-feedback").textContent = "Pre-fill returned no sets — label from scratch.";
+    } else {
+      r.sets.forEach(s => addSet(s, { prefilled: true }));
+      $("#save-feedback").textContent =
+        `Pre-filled ${r.sets.length} set(s) via ${r.prefiller}. Corrections are tracked for dashboard stats.`;
+    }
+    $("#save-feedback").className = "";
+    state.dirty = false;
+  } catch (e) {
+    $("#save-feedback").textContent = `Pre-fill failed: ${e.message}`;
+    $("#save-feedback").className = "error";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "✨ Pre-fill";
+  }
+}
+
 async function saveLabel() {
   if (!state.current) return;
   const { article } = state.current;
   const sets = collectSets();
+  const diff = diffAgainstPrefill(sets);
   const payload = {
     status: $("#save-status").value,
     sets,
-    prefill_used: Boolean(state.current?.label?.prefill_used),
-    fields_corrected_count: 0,
+    prefill_used: Boolean(state.prefillSnapshot),
+    fields_corrected_count: diff?.count ?? 0,
+    fields_corrected: diff ?? null,
   };
   const fb = $("#save-feedback");
   try {
@@ -251,6 +344,33 @@ function stepUnlabeled(dir) {
   while (i >= 0 && i < list.length) {
     if (list[i].status !== "labeled") { loadArticle(list[i].article_id); return; }
     i += dir;
+  }
+}
+
+async function toggleStats() {
+  const panel = $("#stats-panel");
+  if (!panel.hidden) { panel.hidden = true; return; }
+  const summary = $("#stats-summary");
+  summary.textContent = "Loading…";
+  try {
+    const qs = new URLSearchParams({ source: state.source });
+    const data = await fetchJSON(`/api/stats/correction-rate?${qs}`);
+    summary.textContent =
+      `${data.prefilled_count} pre-filled of ${data.labeled_count} labeled articles (source: ${state.source})`;
+    const table = $("#stats-table");
+    table.innerHTML = "<tr><th>Field</th><th>Corrected</th><th>Sets</th><th>Rate</th></tr>";
+    Object.entries(data.fields).forEach(([field, s]) => {
+      const tr = document.createElement("tr");
+      const rate = s.rate == null ? "—" : `${(s.rate * 100).toFixed(1)}%`;
+      const cls = s.rate == null ? "" : s.rate >= 0.3 ? "hi" : s.rate >= 0.1 ? "md" : "lo";
+      tr.innerHTML = `<td></td><td>${s.corrected}</td><td>${s.total_sets}</td><td class="rate ${cls}">${rate}</td>`;
+      tr.querySelector("td").textContent = field;
+      table.appendChild(tr);
+    });
+    panel.hidden = false;
+  } catch (e) {
+    summary.textContent = `Stats failed: ${e.message}`;
+    panel.hidden = false;
   }
 }
 

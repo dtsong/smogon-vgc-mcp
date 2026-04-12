@@ -247,13 +247,33 @@ async def test_load_autocomplete_returns_expected_keys(labeler_db: Path) -> None
 # =============================================================================
 
 
-@pytest.fixture
-def client(labeler_db: Path):
+class FakePrefiller:
+    """Deterministic prefiller used to exercise /api/prefill + correction diff."""
+
+    name: str = "fake"
+    available: bool = True
+
+    def __init__(self, sets=None, should_raise: bool = False) -> None:
+        self._sets = sets or []
+        self._raise = should_raise
+
+    async def prefill(self, *, title: str, content_text: str):
+        if self._raise:
+            raise RuntimeError("boom")
+        return list(self._sets)
+
+
+def _make_client(labeler_db: Path, prefiller=None):
     from fastapi.testclient import TestClient
 
     from smogon_vgc_mcp.labeler.app import create_app
 
-    with TestClient(create_app()) as c:
+    return TestClient(create_app(prefiller=prefiller))
+
+
+@pytest.fixture
+def client(labeler_db: Path):
+    with _make_client(labeler_db) as c:
         yield c
 
 
@@ -390,3 +410,148 @@ def test_static_assets_served(client) -> None:
     r = client.get("/static/labeler.js")
     assert r.status_code == 200
     assert b"addSet" in r.content
+
+
+# =============================================================================
+# Pre-fill + correction-rate dashboard
+# =============================================================================
+
+
+def test_prefill_info_reports_stub_by_default(client) -> None:
+    r = client.get("/api/prefill")
+    assert r.status_code == 200
+    body = r.json()
+    # Default is Anthropic when key is set, else stub. In CI no key → stub.
+    assert "name" in body and "available" in body
+
+
+def test_prefill_endpoint_returns_sets_with_fake(labeler_db: Path) -> None:
+    fake_sets = [
+        {
+            "pokemon": "Pikachu",
+            "ability": "Static",
+            "item": "Light Ball",
+            "move1": "Thunder",
+            "move2": "Volt Tackle",
+            "level": 50,
+        }
+    ]
+    with _make_client(labeler_db, prefiller=FakePrefiller(sets=fake_sets)) as c:
+        info = c.get("/api/prefill").json()
+        assert info == {"name": "fake", "available": True}
+
+        r = c.post("/api/prefill/nugget_bridge/1")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["prefiller"] == "fake"
+        assert body["sets"] == fake_sets
+
+
+def test_prefill_endpoint_503_when_unavailable(labeler_db: Path) -> None:
+    unavailable = FakePrefiller()
+    unavailable.available = False
+    with _make_client(labeler_db, prefiller=unavailable) as c:
+        r = c.post("/api/prefill/nugget_bridge/1")
+        assert r.status_code == 503
+
+
+def test_prefill_endpoint_502_on_exception(labeler_db: Path) -> None:
+    with _make_client(labeler_db, prefiller=FakePrefiller(should_raise=True)) as c:
+        r = c.post("/api/prefill/nugget_bridge/1")
+        assert r.status_code == 502
+
+
+def test_prefill_endpoint_404_missing_article(labeler_db: Path) -> None:
+    with _make_client(labeler_db, prefiller=FakePrefiller()) as c:
+        r = c.post("/api/prefill/nugget_bridge/9999")
+        assert r.status_code == 404
+
+
+def test_correction_rate_empty_when_no_labels(client) -> None:
+    r = client.get("/api/stats/correction-rate")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["labeled_count"] == 0
+    assert body["prefilled_count"] == 0
+    assert body["fields"]["ability"]["rate"] is None
+
+
+def test_correction_rate_aggregates_corrections(client) -> None:
+    # Article 1: pre-filled, labeler corrected ability + item (2 corrections, 1 set)
+    payload1 = {
+        "status": "labeled",
+        "sets": [{"pokemon": "Pikachu", "ability": "Static", "item": "Light Ball"}],
+        "prefill_used": True,
+        "fields_corrected_count": 2,
+        "fields_corrected": {
+            "count": 2,
+            "set_count": 1,
+            "fields": {"ability": 1, "item": 1},
+        },
+    }
+    r = client.post("/api/labels/nugget_bridge/1", json=payload1)
+    assert r.status_code == 200
+
+    # Article 2: pre-filled, no corrections (0 out of 1 set)
+    payload2 = {
+        "status": "labeled",
+        "sets": [{"pokemon": "Garchomp"}],
+        "prefill_used": True,
+        "fields_corrected_count": 0,
+        "fields_corrected": {"count": 0, "set_count": 1, "fields": {}},
+    }
+    r = client.post("/api/labels/nugget_bridge/2", json=payload2)
+    assert r.status_code == 200
+
+    r = client.get("/api/stats/correction-rate?source=nugget_bridge")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["labeled_count"] == 2
+    assert body["prefilled_count"] == 2
+    # ability: 1 correction across 2 sets → 0.5
+    ability = body["fields"]["ability"]
+    assert ability["corrected"] == 1
+    assert ability["total_sets"] == 2
+    assert ability["rate"] == pytest.approx(0.5)
+    # move1 never corrected → 0 / 2 = 0.0
+    assert body["fields"]["move1"]["rate"] == pytest.approx(0.0)
+
+
+def test_correction_rate_excludes_non_prefilled_labels(client) -> None:
+    # Label article 1 without pre-fill → should NOT count in correction-rate denom
+    r = client.post(
+        "/api/labels/nugget_bridge/1",
+        json={
+            "status": "labeled",
+            "sets": [{"pokemon": "Pikachu"}],
+            "prefill_used": False,
+            "fields_corrected_count": 0,
+        },
+    )
+    assert r.status_code == 200
+    body = client.get("/api/stats/correction-rate").json()
+    assert body["labeled_count"] == 1
+    assert body["prefilled_count"] == 0
+    assert body["fields"]["ability"]["total_sets"] == 0
+
+
+# =============================================================================
+# Prefill module directly
+# =============================================================================
+
+
+async def test_stub_prefiller_returns_empty() -> None:
+    from smogon_vgc_mcp.labeler.prefill import StubPrefiller
+
+    sp = StubPrefiller()
+    assert sp.available is True
+    assert await sp.prefill(title="t", content_text="c") == []
+
+
+def test_anthropic_prefiller_unavailable_without_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    from smogon_vgc_mcp.labeler.prefill import AnthropicPrefiller, get_default_prefiller
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert AnthropicPrefiller().available is False
+    # Default falls back to stub when no key
+    assert get_default_prefiller().name == "stub"

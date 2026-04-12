@@ -68,3 +68,18 @@ section:last-child { border-right: none; }
 #save-feedback { margin: 0; padding: 0.35rem 0.75rem; font-size: 0.75rem; color: var(--muted); white-space: pre-wrap; }
 #save-feedback.error { color: var(--bad); }
 #save-feedback.ok { color: var(--ok); }
+
+/* Pre-fill hygiene: pre-filled fields have a subtle blue tint until
+   the labeler touches them (then they become 'corrected' = normal white). */
+.prefilled { background: #ddf4ff !important; }
+.corrected { background: #fff8c5 !important; }
+
+#stats-panel { border-bottom: 1px solid var(--border); background: #f6f8fa; padding: 0.5rem 1rem; font-size: 0.8rem; }
+#stats-summary { color: var(--muted); margin-bottom: 0.5rem; }
+#stats-table { border-collapse: collapse; width: 100%; max-width: 40rem; }
+#stats-table th, #stats-table td { padding: 0.15rem 0.5rem; text-align: left; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+#stats-table th { color: var(--muted); font-weight: 500; }
+#stats-table td.rate { font-weight: 600; }
+#stats-table td.rate.hi { color: var(--bad); }
+#stats-table td.rate.md { color: var(--warn); }
+#stats-table td.rate.lo { color: var(--ok); }

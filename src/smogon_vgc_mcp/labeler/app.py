@@ -8,6 +8,8 @@ Routes:
 - ``GET  /api/articles/{source}/{id}``     — full article + existing label
 - ``POST /api/labels/{source}/{id}``       — save label + update state
 - ``GET  /api/autocomplete``               — species/move/ability/item/nature
+- ``POST /api/prefill/{source}/{id}``      — Tier-1 extractor pre-fill
+- ``GET  /api/stats/correction-rate``      — per-field correction dashboard
 """
 
 from __future__ import annotations
@@ -27,7 +29,9 @@ from pydantic import BaseModel, Field
 from smogon_vgc_mcp.database.schema import get_connection, init_database
 from smogon_vgc_mcp.formats import list_formats
 from smogon_vgc_mcp.labeler.autocomplete import load_autocomplete
+from smogon_vgc_mcp.labeler.prefill import Prefiller, get_default_prefiller
 from smogon_vgc_mcp.labeler.sources import SOURCES, get_source
+from smogon_vgc_mcp.labeler.stats import correction_rate_summary
 from smogon_vgc_mcp.labeler.storage import (
     label_output_path,
     list_states,
@@ -86,8 +90,10 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
 
-def create_app() -> FastAPI:
+def create_app(prefiller: Prefiller | None = None) -> FastAPI:
     app = FastAPI(title="Smogon VGC Labeler", version="0.1.0", lifespan=_lifespan)
+
+    active_prefiller: Prefiller = prefiller or get_default_prefiller()
 
     if _STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
@@ -215,5 +221,38 @@ def create_app() -> FastAPI:
     @app.get("/api/labels/{source}/{article_id}/path")
     async def get_label_path(source: str, article_id: str) -> dict:
         return {"path": str(label_output_path(source, article_id))}
+
+    @app.get("/api/prefill")
+    async def get_prefill_info() -> dict:
+        return {"name": active_prefiller.name, "available": active_prefiller.available}
+
+    @app.post("/api/prefill/{source}/{article_id}")
+    async def run_prefill(source: str, article_id: str) -> dict:
+        try:
+            adapter = get_source(source)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+        async with get_connection() as db:
+            detail = await adapter.get_article(db, article_id)
+        if detail is None:
+            raise HTTPException(status_code=404, detail="Article not found")
+        if not active_prefiller.available:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Prefiller '{active_prefiller.name}' is not available",
+            )
+        try:
+            sets = await active_prefiller.prefill(
+                title=detail.title, content_text=detail.content_text or ""
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Prefill failed: {exc}") from exc
+        return {"prefiller": active_prefiller.name, "sets": sets}
+
+    @app.get("/api/stats/correction-rate")
+    async def get_correction_rate(source: str | None = None) -> dict:
+        async with get_connection() as db:
+            return await correction_rate_summary(db, source=source)
 
     return app

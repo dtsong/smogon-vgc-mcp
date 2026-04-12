@@ -27,8 +27,14 @@
     <span id="progress"></span>
     <button id="prev-unlabeled">← Prev unlabeled</button>
     <button id="next-unlabeled">Next unlabeled →</button>
+    <button id="stats-toggle">📊 Stats</button>
   </div>
 </header>
+
+<div id="stats-panel" hidden>
+  <div id="stats-summary"></div>
+  <table id="stats-table"></table>
+</div>
 
 <main>
   <aside id="article-list"></aside>
@@ -44,6 +50,7 @@
     <div id="sets-container"></div>
     <div class="editor-actions">
       <button id="add-set">+ Add set</button>
+      <button id="run-prefill" title="Ask Tier-1 extractor to pre-fill this article">✨ Pre-fill</button>
       <span class="spacer"></span>
       <select id="save-status">
         <option value="labeled">Labeled</option>
