@@ -9,12 +9,14 @@ const state = {
   source: "nugget_bridge",
   format: "",
   statusFilter: "",
+  triageFilter: "has_sets",
   articles: [],
   current: null,   // {article, state, label}
   autocomplete: null,
   dirty: false,
   prefill: { name: "stub", available: false },
   prefillSnapshot: null, // list of pre-filled set dicts for current article (frozen at pre-fill time)
+  triage: { name: "stub", available: false },
 };
 
 // Fields we diff between pre-fill and save for the correction dashboard.
@@ -34,13 +36,15 @@ async function fetchJSON(url, opts = {}) {
 }
 
 async function init() {
-  const [sources, formats, ac, prefill] = await Promise.all([
+  const [sources, formats, ac, prefill, triage] = await Promise.all([
     fetchJSON("/api/sources"),
     fetchJSON("/api/formats"),
     fetchJSON("/api/autocomplete"),
     fetchJSON("/api/prefill").catch(() => ({ name: "stub", available: false })),
+    fetchJSON("/api/triage").catch(() => ({ name: "stub", available: false })),
   ]);
   state.prefill = prefill;
+  state.triage = triage;
   const sourceSel = $("#source");
   sources.forEach(s => sourceSel.add(new Option(s, s)));
   sourceSel.value = state.source;
@@ -58,11 +62,13 @@ async function init() {
   sourceSel.addEventListener("change", e => { state.source = e.target.value; loadArticles(); });
   fmtSel.addEventListener("change", e => { state.format = e.target.value; loadArticles(); });
   $("#status-filter").addEventListener("change", e => { state.statusFilter = e.target.value; renderList(); });
+  $("#triage-filter").addEventListener("change", e => { state.triageFilter = e.target.value; renderList(); });
   $("#add-set").addEventListener("click", () => { addSet(); markDirty(); });
   $("#save").addEventListener("click", saveLabel);
   $("#prev-unlabeled").addEventListener("click", () => stepUnlabeled(-1));
   $("#next-unlabeled").addEventListener("click", () => stepUnlabeled(+1));
   $("#run-prefill").addEventListener("click", runPrefill);
+  $("#run-triage").addEventListener("click", runTriage);
   $("#stats-toggle").addEventListener("click", toggleStats);
   window.addEventListener("beforeunload", e => {
     if (state.dirty) { e.preventDefault(); e.returnValue = ""; }
@@ -73,6 +79,12 @@ async function init() {
   prefillBtn.title = state.prefill.available
     ? `Ask ${state.prefill.name} to pre-fill this article`
     : `Pre-fill unavailable (${state.prefill.name}) — set ANTHROPIC_API_KEY`;
+
+  const triageBtn = $("#run-triage");
+  triageBtn.disabled = !state.triage.available;
+  triageBtn.title = state.triage.available
+    ? `Batch-triage untriaged articles via ${state.triage.name}`
+    : `Triage unavailable (${state.triage.name}) — set ANTHROPIC_API_KEY`;
 
   await loadArticles();
 }
@@ -94,13 +106,20 @@ async function loadArticles() {
 function renderList() {
   const list = $("#article-list");
   list.innerHTML = "";
-  const filtered = state.articles.filter(a =>
-    !state.statusFilter || a.status === state.statusFilter
-  );
+  const filtered = state.articles.filter(a => {
+    if (state.statusFilter && a.status !== state.statusFilter) return false;
+    if (state.triageFilter === "has_sets" && a.triage_result !== "has_sets" && a.triage_result != null) return false;
+    if (state.triageFilter === "no_sets" && a.triage_result !== "no_sets") return false;
+    if (state.triageFilter === "untriaged" && a.triage_result != null) return false;
+    return true;
+  });
   filtered.forEach(a => {
     const el = document.createElement("div");
     el.className = "article-item" + (state.current?.article.article_id === a.article_id ? " active" : "");
-    el.innerHTML = `<span class="badge ${a.status}">${a.status.replace("_", " ")}</span>
+    const triageBadge = a.triage_result
+      ? `<span class="badge triage-${a.triage_result}">${a.triage_result === "has_sets" ? "sets" : "no sets"}</span>`
+      : "";
+    el.innerHTML = `<span class="badge ${a.status}">${a.status.replace("_", " ")}</span>${triageBadge}
       <span class="title"></span>
       <span class="meta"></span>`;
     el.querySelector(".title").textContent = a.title;
@@ -184,6 +203,11 @@ function addSet(data = {}, { prefilled = false } = {}) {
   card.querySelector(".remove-set").addEventListener("click", () => {
     card.remove(); markDirty();
   });
+  card.querySelector(".parse-paste").addEventListener("click", () => {
+    const text = card.querySelector(".f-showdown-paste").value;
+    const parsed = parseShowdownImport(text);
+    if (parsed) { applyShowdownToCard(card, parsed); markDirty(); }
+  });
 
   if (prefilled) {
     card.dataset.prefilled = "true";
@@ -207,6 +231,76 @@ function addSet(data = {}, { prefilled = false } = {}) {
   $("#sets-container").appendChild(card);
   updateEvTotal(card);
   return card;
+}
+
+function parseShowdownImport(text) {
+  const lines = text.trim().split("\n").map(l => l.trim()).filter(Boolean);
+  if (lines.length === 0) return null;
+  const result = {
+    pokemon: null, item: null, ability: null, nature: null, level: 50,
+    tera_type: null, moves: [], evs: {},
+  };
+
+  // Line 1: "Pokemon @ Item" or just "Pokemon"
+  const first = lines[0];
+  const atIdx = first.lastIndexOf(" @ ");
+  if (atIdx !== -1) {
+    result.pokemon = first.slice(0, atIdx).trim();
+    result.item = first.slice(atIdx + 3).trim();
+  } else {
+    result.pokemon = first.trim();
+  }
+  // Strip gender suffix like " (M)" or " (F)"
+  result.pokemon = result.pokemon.replace(/\s*\([MF]\)\s*$/, "").trim();
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+
+    if (line.startsWith("Ability:")) {
+      result.ability = line.slice(8).trim();
+    } else if (line.startsWith("Level:")) {
+      result.level = parseInt(line.slice(6).trim(), 10) || 50;
+    } else if (line.startsWith("Tera Type:")) {
+      result.tera_type = line.slice(10).trim();
+    } else if (line.startsWith("EVs:")) {
+      const evStr = line.slice(4).trim();
+      for (const part of evStr.split("/")) {
+        const m = part.trim().match(/^(\d+)\s+(HP|Atk|Def|SpA|SpD|Spe)$/i);
+        if (m) result.evs[m[2].toLowerCase()] = parseInt(m[1], 10);
+      }
+      // Normalize stat names
+      const map = { hp: "hp", atk: "atk", def: "def", spa: "spa", spd: "spd", spe: "spe" };
+      const normalized = {};
+      for (const [k, v] of Object.entries(result.evs)) {
+        const key = map[k] || k;
+        normalized[key] = v;
+      }
+      result.evs = normalized;
+    } else if (line.endsWith("Nature")) {
+      result.nature = line.replace(/\s*Nature$/, "").trim();
+    } else if (line.startsWith("- ") || line.startsWith("–")) {
+      const move = line.replace(/^[-–]\s*/, "").trim();
+      if (move && result.moves.length < 4) result.moves.push(move);
+    }
+  }
+  return result;
+}
+
+function applyShowdownToCard(card, parsed) {
+  if (!parsed) return;
+  if (parsed.pokemon) card.querySelector(".f-pokemon").value = parsed.pokemon;
+  if (parsed.ability) card.querySelector(".f-ability").value = parsed.ability;
+  if (parsed.item) card.querySelector(".f-item").value = parsed.item;
+  if (parsed.nature) card.querySelector(".f-nature").value = parsed.nature;
+  if (parsed.tera_type) card.querySelector(".f-tera").value = parsed.tera_type;
+  if (parsed.level) card.querySelector(".f-level").value = parsed.level;
+  const moveInputs = card.querySelectorAll(".f-move");
+  parsed.moves.forEach((m, i) => { if (moveInputs[i]) moveInputs[i].value = m; });
+  card.querySelectorAll(".f-ev").forEach(inp => {
+    const stat = inp.dataset.stat;
+    if (parsed.evs[stat] != null) inp.value = parsed.evs[stat];
+  });
+  updateEvTotal(card);
 }
 
 function updateEvTotal(card) {
@@ -344,6 +438,28 @@ function stepUnlabeled(dir) {
   while (i >= 0 && i < list.length) {
     if (list[i].status !== "labeled") { loadArticle(list[i].article_id); return; }
     i += dir;
+  }
+}
+
+async function runTriage() {
+  if (!state.triage.available) return;
+  const btn = $("#run-triage");
+  btn.disabled = true;
+  btn.textContent = "🔍 Triaging…";
+  const fb = $("#save-feedback");
+  try {
+    const r = await fetchJSON(`/api/triage/${state.source}?limit=200`, { method: "POST" });
+    const hasSets = r.results.filter(x => x.triage_result === "has_sets").length;
+    const noSets = r.results.filter(x => x.triage_result === "no_sets").length;
+    fb.textContent = `Triaged ${r.triaged} articles: ${hasSets} with sets, ${noSets} without.`;
+    fb.className = "ok";
+    await loadArticles();
+  } catch (e) {
+    fb.textContent = `Triage failed: ${e.message}`;
+    fb.className = "error";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "🔍 Triage";
   }
 }
 

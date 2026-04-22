@@ -24,6 +24,14 @@
         <option value="skipped">Skipped</option>
       </select>
     </label>
+    <label>Triage
+      <select id="triage-filter">
+        <option value="">All</option>
+        <option value="has_sets" selected>Has sets</option>
+        <option value="no_sets">No sets</option>
+        <option value="untriaged">Untriaged</option>
+      </select>
+    </label>
     <span id="progress"></span>
     <button id="prev-unlabeled">← Prev unlabeled</button>
     <button id="next-unlabeled">Next unlabeled →</button>
@@ -51,6 +59,7 @@
     <div class="editor-actions">
       <button id="add-set">+ Add set</button>
       <button id="run-prefill" title="Ask Tier-1 extractor to pre-fill this article">✨ Pre-fill</button>
+      <button id="run-triage" title="Batch-triage untriaged articles (LLM classifies has_sets / no_sets)">🔍 Triage</button>
       <span class="spacer"></span>
       <select id="save-status">
         <option value="labeled">Labeled</option>
@@ -71,6 +80,10 @@
 
 <template id="set-template">
   <div class="set-card">
+    <div class="set-row paste-row">
+      <textarea class="f-showdown-paste" placeholder="Paste Showdown import here…" rows="3"></textarea>
+      <button class="parse-paste" title="Parse Showdown paste into fields">📋 Parse</button>
+    </div>
     <div class="set-row">
       <button class="remove-set" title="Remove set">×</button>
       <input class="f-pokemon" list="dl-pokemon" placeholder="Pokémon">

@@ -36,9 +36,11 @@ from smogon_vgc_mcp.labeler.storage import (
     label_output_path,
     list_states,
     read_label_json,
+    set_triage_result,
     upsert_state,
     write_label_json,
 )
+from smogon_vgc_mcp.labeler.triage import Triager, get_default_triager
 
 _HERE = Path(__file__).parent
 _TEMPLATES_DIR = _HERE / "templates"
@@ -90,10 +92,14 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
 
-def create_app(prefiller: Prefiller | None = None) -> FastAPI:
+def create_app(
+    prefiller: Prefiller | None = None,
+    triager: Triager | None = None,
+) -> FastAPI:
     app = FastAPI(title="Smogon VGC Labeler", version="0.1.0", lifespan=_lifespan)
 
     active_prefiller: Prefiller = prefiller or get_default_prefiller()
+    active_triager: Triager = triager or get_default_triager()
 
     if _STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
@@ -148,6 +154,7 @@ def create_app(prefiller: Prefiller | None = None) -> FastAPI:
                     "status": (state or {}).get("status", "unlabeled"),
                     "labeled_at": (state or {}).get("labeled_at"),
                     "prefill_used": bool((state or {}).get("prefill_used", 0)),
+                    "triage_result": (state or {}).get("triage_result"),
                 }
             )
         return {"items": items, "limit": limit, "offset": offset}
@@ -249,6 +256,63 @@ def create_app(prefiller: Prefiller | None = None) -> FastAPI:
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"Prefill failed: {exc}") from exc
         return {"prefiller": active_prefiller.name, "sets": sets}
+
+    @app.get("/api/triage")
+    async def get_triage_info() -> dict:
+        return {"name": active_triager.name, "available": active_triager.available}
+
+    @app.post("/api/triage/{source}")
+    async def run_triage(source: str, limit: int = 50) -> dict:
+        try:
+            adapter = get_source(source)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+        if not active_triager.available:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Triager '{active_triager.name}' is not available",
+            )
+
+        limit = max(1, min(limit, 200))
+        async with get_connection() as db:
+            articles = await adapter.list_articles(db, format=None, limit=limit, offset=0)
+            states = await list_states(db, source=source)
+
+        untriaged = [
+            a for a in articles if (states.get(a.article_id) or {}).get("triage_result") is None
+        ]
+
+        results: list[dict] = []
+        for article in untriaged:
+            async with get_connection() as db:
+                detail = await adapter.get_article(db, article.article_id)
+            if detail is None:
+                continue
+            try:
+                has_sets = await active_triager.classify(
+                    title=detail.title, content_text=detail.content_text or ""
+                )
+            except Exception:
+                has_sets = None
+
+            triage_val = "has_sets" if has_sets else ("no_sets" if has_sets is False else "unknown")
+            async with get_connection() as db:
+                await set_triage_result(
+                    db,
+                    source=source,
+                    article_id=article.article_id,
+                    triage_result=triage_val,
+                )
+            results.append(
+                {
+                    "article_id": article.article_id,
+                    "title": article.title,
+                    "triage_result": triage_val,
+                }
+            )
+
+        return {"triager": active_triager.name, "triaged": len(results), "results": results}
 
     @app.get("/api/stats/correction-rate")
     async def get_correction_rate(source: str | None = None) -> dict:

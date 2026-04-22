@@ -97,6 +97,25 @@ async def list_states(
     return {row["article_id"]: dict(row) for row in rows}
 
 
+async def set_triage_result(
+    db: aiosqlite.Connection,
+    *,
+    source: str,
+    article_id: str,
+    triage_result: str,
+) -> None:
+    await db.execute(
+        """
+        INSERT INTO label_state (article_id, source, status, triage_result)
+        VALUES (?, ?, 'unlabeled', ?)
+        ON CONFLICT(source, article_id) DO UPDATE SET
+            triage_result = excluded.triage_result
+        """,
+        (article_id, source, triage_result),
+    )
+    await db.commit()
+
+
 def write_label_json(
     source: str,
     article_id: str,

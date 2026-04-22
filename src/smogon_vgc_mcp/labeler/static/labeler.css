@@ -37,6 +37,8 @@ section:last-child { border-right: none; }
 .badge.in_progress { background: #fff8c5; color: var(--warn); }
 .badge.labeled { background: #dafbe1; color: var(--ok); }
 .badge.skipped { background: #ffebe9; color: var(--bad); }
+.badge.triage-has_sets { background: #dafbe1; color: var(--ok); }
+.badge.triage-no_sets { background: #eaeef2; color: var(--muted); }
 
 #article-pane { display: flex; flex-direction: column; background: var(--panel); }
 #article-meta { padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); font-size: 0.8rem; color: var(--muted); }
@@ -61,6 +63,9 @@ section:last-child { border-right: none; }
 .ev-total { font-variant-numeric: tabular-nums; color: var(--muted); margin-left: auto; font-weight: 600; }
 .ev-total.over { color: var(--bad); }
 .f-snippet { width: 100%; font-family: ui-monospace, monospace; font-size: 0.75rem; padding: 0.4rem; resize: vertical; min-height: 2.5rem; margin-top: 0.25rem; }
+.paste-row { flex-direction: column; align-items: stretch; }
+.f-showdown-paste { width: 100%; font-family: ui-monospace, monospace; font-size: 0.75rem; resize: vertical; min-height: 2rem; padding: 0.3rem; }
+.parse-paste { align-self: flex-end; font-size: 0.75rem; padding: 0.2rem 0.5rem; }
 .remove-set { background: transparent; color: var(--muted); border: 0; font-size: 1.2rem; line-height: 1; padding: 0 0.35rem; }
 .remove-set:hover { color: var(--bad); }
 .editor-actions { padding: 0.5rem 0.75rem; border-top: 1px solid var(--border); display: flex; gap: 0.5rem; align-items: center; }

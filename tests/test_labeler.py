@@ -98,6 +98,7 @@ async def test_label_state_table_created(labeler_db: Path) -> None:
         "fields_corrected_count",
         "fields_corrected_json",
         "output_path",
+        "triage_result",
     } <= cols
 
 
@@ -263,12 +264,12 @@ class FakePrefiller:
         return list(self._sets)
 
 
-def _make_client(labeler_db: Path, prefiller=None):
+def _make_client(labeler_db: Path, prefiller=None, triager=None):
     from fastapi.testclient import TestClient
 
     from smogon_vgc_mcp.labeler.app import create_app
 
-    return TestClient(create_app(prefiller=prefiller))
+    return TestClient(create_app(prefiller=prefiller, triager=triager))
 
 
 @pytest.fixture
@@ -555,3 +556,92 @@ def test_anthropic_prefiller_unavailable_without_key(monkeypatch: pytest.MonkeyP
     assert AnthropicPrefiller().available is False
     # Default falls back to stub when no key
     assert get_default_prefiller().name == "stub"
+
+
+# =============================================================================
+# Triage
+# =============================================================================
+
+
+class FakeTriager:
+    name: str = "fake-triager"
+    available: bool = True
+
+    def __init__(self, *, result: bool | None = True, should_raise: bool = False):
+        self._result = result
+        self._raise = should_raise
+
+    async def classify(self, *, title: str, content_text: str) -> bool | None:
+        if self._raise:
+            raise RuntimeError("boom")
+        return self._result
+
+
+def test_triage_info_endpoint(labeler_db: Path) -> None:
+    with _make_client(labeler_db, triager=FakeTriager()) as c:
+        r = c.get("/api/triage")
+        assert r.status_code == 200
+        assert r.json() == {"name": "fake-triager", "available": True}
+
+
+def test_triage_batch_classifies_articles(labeler_db: Path) -> None:
+    with _make_client(labeler_db, triager=FakeTriager(result=True)) as c:
+        r = c.post("/api/triage/nugget_bridge?limit=10")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["triaged"] == 2  # 2 articles with fetch_status=ok
+        assert all(x["triage_result"] == "has_sets" for x in body["results"])
+
+        # Articles list now includes triage_result
+        r = c.get("/api/articles?source=nugget_bridge")
+        items = r.json()["items"]
+        triaged = [i for i in items if i.get("triage_result") == "has_sets"]
+        assert len(triaged) == 2
+
+
+def test_triage_no_sets_classification(labeler_db: Path) -> None:
+    with _make_client(labeler_db, triager=FakeTriager(result=False)) as c:
+        r = c.post("/api/triage/nugget_bridge?limit=10")
+        assert r.status_code == 200
+        assert all(x["triage_result"] == "no_sets" for x in r.json()["results"])
+
+
+def test_triage_503_when_unavailable(labeler_db: Path) -> None:
+    t = FakeTriager()
+    t.available = False
+    with _make_client(labeler_db, triager=t) as c:
+        r = c.post("/api/triage/nugget_bridge")
+        assert r.status_code == 503
+
+
+def test_triage_skips_already_triaged(labeler_db: Path) -> None:
+    with _make_client(labeler_db, triager=FakeTriager(result=True)) as c:
+        # First run triages everything
+        r1 = c.post("/api/triage/nugget_bridge?limit=10")
+        assert r1.json()["triaged"] == 2
+
+        # Second run finds nothing new
+        r2 = c.post("/api/triage/nugget_bridge?limit=10")
+        assert r2.json()["triaged"] == 0
+
+
+def test_triage_unknown_source_404(labeler_db: Path) -> None:
+    with _make_client(labeler_db, triager=FakeTriager()) as c:
+        r = c.post("/api/triage/nope")
+        assert r.status_code == 404
+
+
+async def test_stub_triager_returns_none() -> None:
+    from smogon_vgc_mcp.labeler.triage import StubTriager
+
+    t = StubTriager()
+    assert t.available is True
+    assert await t.classify(title="t", content_text="c") is None
+
+
+def test_anthropic_triager_unavailable_without_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    from smogon_vgc_mcp.labeler.triage import AnthropicTriager, get_default_triager
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert AnthropicTriager().available is False
+    assert get_default_triager().name == "stub"

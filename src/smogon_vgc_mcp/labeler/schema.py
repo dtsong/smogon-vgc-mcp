@@ -32,4 +32,11 @@ CREATE INDEX IF NOT EXISTS idx_label_state_source_status
 async def migrate_add_labeler_tables(db: aiosqlite.Connection) -> None:
     """Create the ``label_state`` table. Safe to run on every startup."""
     await db.executescript(LABELER_SCHEMA)
+
+    # Additive migration: triage_result column for LLM article classification.
+    cursor = await db.execute("PRAGMA table_info(label_state)")
+    cols = {row[1] for row in await cursor.fetchall()}
+    if "triage_result" not in cols:
+        await db.execute("ALTER TABLE label_state ADD COLUMN triage_result TEXT")
+
     await db.commit()
