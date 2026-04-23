@@ -45,6 +45,20 @@ def _check_team_shape(pokes: list[ChampionsTeamPokemon]) -> list[str]:
     return reasons
 
 
+NATURES = frozenset({
+    "Hardy", "Lonely", "Brave", "Adamant", "Naughty",
+    "Bold", "Docile", "Relaxed", "Impish", "Lax",
+    "Timid", "Hasty", "Serious", "Jolly", "Naive",
+    "Modest", "Mild", "Quiet", "Bashful", "Rash",
+    "Calm", "Gentle", "Sassy", "Careful", "Quirky",
+})
+
+TYPES = frozenset({
+    "Normal", "Fire", "Water", "Electric", "Grass", "Ice",
+    "Fighting", "Poison", "Ground", "Flying", "Psychic", "Bug",
+    "Rock", "Ghost", "Dragon", "Dark", "Steel", "Fairy",
+})
+
 DexLookup = dict[str, dict[str, list[str]]]  # name_casefold -> {"abilities": [...], "moves": [...]}
 
 
@@ -75,6 +89,18 @@ def _check_ability_and_moves(
     return soft
 
 
+def _check_vocab_and_moves(poke: ChampionsTeamPokemon) -> list[str]:
+    soft: list[str] = []
+    if poke.nature is not None and poke.nature not in NATURES:
+        soft.append("nature_unknown")
+    if poke.tera_type is not None and poke.tera_type not in TYPES:
+        soft.append("tera_type_unknown")
+    moves = [m for m in (poke.move1, poke.move2, poke.move3, poke.move4) if m]
+    if not (1 <= len(moves) <= 4):
+        soft.append("move_count")
+    return soft
+
+
 def validate(
     draft: ChampionsTeamDraft,
     *,
@@ -95,6 +121,9 @@ def validate(
             if code not in hard:
                 hard.append(code)
         for code in _check_ability_and_moves(poke, dex_lookup):
+            if code not in soft:
+                soft.append(code)
+        for code in _check_vocab_and_moves(poke):
             if code not in soft:
                 soft.append(code)
 

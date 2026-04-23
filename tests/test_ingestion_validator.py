@@ -137,3 +137,45 @@ def test_legal_ability_and_moves_ok():
     )
     assert "ability_illegal" not in rep.soft_failures
     assert "move_illegal" not in rep.soft_failures
+
+
+def test_nature_unknown_soft():
+    rep = validate(_draft(
+        ChampionsTeamPokemon(slot=1, pokemon="X", nature="Weird"),
+    ))
+    assert "nature_unknown" in rep.soft_failures
+
+
+def test_nature_known_ok():
+    rep = validate(_draft(
+        ChampionsTeamPokemon(slot=1, pokemon="X", nature="Timid"),
+    ))
+    assert "nature_unknown" not in rep.soft_failures
+
+
+def test_tera_type_unknown_soft():
+    rep = validate(_draft(
+        ChampionsTeamPokemon(slot=1, pokemon="X", tera_type="Banana"),
+    ))
+    assert "tera_type_unknown" in rep.soft_failures
+
+
+def test_tera_type_none_ok():
+    rep = validate(_draft(
+        ChampionsTeamPokemon(slot=1, pokemon="X", tera_type=None),
+    ))
+    assert "tera_type_unknown" not in rep.soft_failures
+
+
+def test_move_count_zero_soft():
+    # no moves at all
+    rep = validate(_draft(ChampionsTeamPokemon(slot=1, pokemon="X")))
+    assert "move_count" in rep.soft_failures
+
+
+def test_move_count_four_ok():
+    rep = validate(_draft(ChampionsTeamPokemon(
+        slot=1, pokemon="X",
+        move1="a", move2="b", move3="c", move4="d",
+    )))
+    assert "move_count" not in rep.soft_failures
