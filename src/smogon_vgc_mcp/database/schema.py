@@ -554,6 +554,72 @@ async def migrate_add_nugget_bridge_tables(db: aiosqlite.Connection) -> None:
     await db.commit()
 
 
+# =============================================================================
+# Champions team ingestion tables
+# =============================================================================
+
+CHAMPIONS_TEAMS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS champions_teams (
+    id INTEGER PRIMARY KEY,
+    format TEXT NOT NULL DEFAULT 'champions_ma',
+    team_id TEXT NOT NULL,
+    description TEXT,
+    owner TEXT,
+    source_type TEXT NOT NULL,
+    source_url TEXT NOT NULL,
+    ingestion_status TEXT NOT NULL,
+    confidence_score REAL NOT NULL,
+    review_reasons TEXT,
+    normalizations TEXT,
+    ingested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(format, team_id)
+);
+
+CREATE TABLE IF NOT EXISTS champions_team_pokemon (
+    id INTEGER PRIMARY KEY,
+    team_id INTEGER NOT NULL REFERENCES champions_teams(id) ON DELETE CASCADE,
+    slot INTEGER NOT NULL,
+    pokemon TEXT NOT NULL,
+    item TEXT,
+    ability TEXT,
+    nature TEXT,
+    tera_type TEXT,
+    level INTEGER DEFAULT 50,
+    sp_hp INTEGER DEFAULT 0,
+    sp_atk INTEGER DEFAULT 0,
+    sp_def INTEGER DEFAULT 0,
+    sp_spa INTEGER DEFAULT 0,
+    sp_spd INTEGER DEFAULT 0,
+    sp_spe INTEGER DEFAULT 0,
+    move1 TEXT,
+    move2 TEXT,
+    move3 TEXT,
+    move4 TEXT,
+    UNIQUE(team_id, slot),
+    CHECK(sp_hp BETWEEN 0 AND 32),
+    CHECK(sp_atk BETWEEN 0 AND 32),
+    CHECK(sp_def BETWEEN 0 AND 32),
+    CHECK(sp_spa BETWEEN 0 AND 32),
+    CHECK(sp_spd BETWEEN 0 AND 32),
+    CHECK(sp_spe BETWEEN 0 AND 32),
+    CHECK(sp_hp + sp_atk + sp_def + sp_spa + sp_spd + sp_spe <= 66),
+    CHECK(slot BETWEEN 1 AND 6)
+);
+
+CREATE INDEX IF NOT EXISTS idx_champions_teams_format ON champions_teams(format);
+CREATE INDEX IF NOT EXISTS idx_champions_teams_source ON champions_teams(source_type);
+CREATE INDEX IF NOT EXISTS idx_champions_teams_status ON champions_teams(ingestion_status);
+CREATE INDEX IF NOT EXISTS idx_champions_team_pokemon_pokemon ON champions_team_pokemon(pokemon);
+CREATE INDEX IF NOT EXISTS idx_champions_team_pokemon_team_id ON champions_team_pokemon(team_id);
+"""
+
+
+async def migrate_add_champions_teams_tables(db: aiosqlite.Connection) -> None:
+    """Create champions_teams + champions_team_pokemon. Safe on every startup."""
+    await db.executescript(CHAMPIONS_TEAMS_SCHEMA)
+    await db.commit()
+
+
 async def init_database(db_path: Path | None = None) -> None:
     """Initialize the database with schema and run migrations."""
     if db_path is None:
@@ -569,6 +635,7 @@ async def init_database(db_path: Path | None = None) -> None:
         await migrate_add_format_column(db)
         await migrate_add_nugget_bridge_tables(db)
         await migrate_add_labeler_tables(db)
+        await migrate_add_champions_teams_tables(db)
         await db.commit()
 
 
