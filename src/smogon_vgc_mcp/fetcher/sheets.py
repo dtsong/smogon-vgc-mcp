@@ -5,10 +5,12 @@ import csv
 import io
 import logging
 import re
+from pathlib import Path
 
 import aiosqlite
 
 from smogon_vgc_mcp.database.schema import get_connection, get_db_path, init_database
+from smogon_vgc_mcp.fetcher.ingestion.pipeline import ingest_url
 from smogon_vgc_mcp.fetcher.pokepaste import fetch_pokepaste, parse_pokepaste
 from smogon_vgc_mcp.formats import DEFAULT_FORMAT, get_format, get_sheet_csv_url
 from smogon_vgc_mcp.resilience import (
@@ -286,3 +288,37 @@ async def fetch_and_store_pokepaste_teams(
         "skipped_details": skipped[:10],
         "circuit_states": get_all_circuit_states(),
     }
+
+
+async def ingest_champions_sheet(db_path: Path | None = None) -> dict[str, int]:
+    """Read the Champions Google Sheet tab and ingest each row's URL.
+
+    Returns a counter dict of status -> count.
+    """
+    sheet_url = get_sheet_csv_url("champions_ma")
+    if not sheet_url:
+        return {"auto": 0, "review_pending": 0, "rejected": 0, "fetch_failed": 0, "parse_failed": 0}
+
+    fetched = await fetch_text_resilient(sheet_url, service="sheets")
+    if not fetched.success or not fetched.data:
+        return {"auto": 0, "review_pending": 0, "rejected": 0, "fetch_failed": 1, "parse_failed": 0}
+
+    reader = csv.reader(io.StringIO(fetched.data))
+    rows = list(reader)
+
+    counts: dict[str, int] = {
+        "auto": 0,
+        "review_pending": 0,
+        "rejected": 0,
+        "fetch_failed": 0,
+        "parse_failed": 0,
+    }
+
+    for row in rows[1:]:  # skip header
+        url = next((c for c in row if c.startswith(("http://", "https://"))), "")
+        if not url:
+            continue
+        result = await ingest_url(url, db_path=db_path)
+        counts[result.status] = counts.get(result.status, 0) + 1
+
+    return counts

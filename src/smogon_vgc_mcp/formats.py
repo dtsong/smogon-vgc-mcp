@@ -64,6 +64,7 @@ FORMATS: dict[str, FormatConfig] = {
         stat_system="champions_sp",
         calc_backend="python_native",
         smogon_stats_available=False,
+        sheet_gid="791705272",
         is_current=False,
     ),
     # Historical archives — Nugget Bridge corpus (2012-2017). No live stats,
