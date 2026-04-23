@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+import aiosqlite
+
 from smogon_vgc_mcp.database.champions_team_queries import (
     compute_team_fingerprint,
     write_or_queue_team,
@@ -27,7 +29,7 @@ from smogon_vgc_mcp.fetcher.ingestion.normalizer import normalize
 from smogon_vgc_mcp.fetcher.ingestion.tier1_pokepaste import (
     parse_pokepaste_to_champions_draft,
 )
-from smogon_vgc_mcp.fetcher.ingestion.validator import validate
+from smogon_vgc_mcp.fetcher.ingestion.validator import DexLookup, validate
 from smogon_vgc_mcp.fetcher.pokepaste import fetch_pokepaste
 from smogon_vgc_mcp.resilience import ErrorCategory, FetchResult, ServiceError
 
@@ -35,10 +37,13 @@ logger = logging.getLogger(__name__)
 
 AUTO_WRITE_THRESHOLD = 0.85
 
-IngestStatus = Literal["auto", "review_pending", "fetch_failed", "parse_failed", "rejected"]
+IngestStatus = Literal[
+    "auto", "review_pending", "fetch_failed", "parse_failed", "db_error", "rejected"
+]
 # Subset actually persisted to ChampionsTeam.ingestion_status. Other
 # IngestStatus values are transient: either we never got to a DB write
-# (fetch_failed / parse_failed / rejected) or the write itself raised.
+# (fetch_failed / parse_failed / rejected) or the write itself raised
+# (db_error).
 WrittenIngestionStatus = Literal["auto", "review_pending"]
 
 
@@ -80,8 +85,57 @@ def _score(draft: ChampionsTeamDraft, soft_count: int) -> float:
     return max(0.0, draft.tier_baseline_confidence - 0.1 * soft_count)
 
 
-async def ingest_url(url: str, *, db_path: Path | None = None) -> IngestResult:
+async def load_dex_lookup(db_path: Path | None = None) -> DexLookup | None:
+    """Build a dex lookup keyed on casefolded Pokemon name.
+
+    Returns None if the ``champions_dex_pokemon`` table has no rows —
+    callers should treat that as "dex not loaded" and skip identity/
+    legality checks. Logs once at warning level when empty so the
+    silent-skip condition is visible in production.
+    """
+    async with get_connection(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        pokemon_rows = await db.execute_fetchall(
+            "SELECT name, ability1, ability2, ability_hidden FROM champions_dex_pokemon"
+        )
+        if not pokemon_rows:
+            logger.warning(
+                "load_dex_lookup: champions_dex_pokemon is empty — "
+                "identity/legality checks will be skipped"
+            )
+            return None
+
+        learnset_rows = await db.execute_fetchall(
+            """
+            SELECT p.name AS pokemon_name, m.name AS move_name
+            FROM champions_dex_learnsets l
+            JOIN champions_dex_pokemon p ON p.id = l.pokemon_id
+            JOIN champions_dex_moves m ON m.id = l.move_id
+            """
+        )
+
+    lookup: DexLookup = {}
+    for row in pokemon_rows:
+        abilities = [row[k] for k in ("ability1", "ability2", "ability_hidden") if row[k]]
+        lookup[row["name"].casefold()] = {"abilities": abilities, "moves": []}
+    for row in learnset_rows:
+        key = row["pokemon_name"].casefold()
+        entry = lookup.get(key)
+        if entry is not None:
+            entry["moves"].append(row["move_name"])
+    return lookup
+
+
+async def ingest_url(
+    url: str,
+    *,
+    db_path: Path | None = None,
+    dex_lookup: DexLookup | None = None,
+) -> IngestResult:
     await init_database(db_path)
+    if dex_lookup is None:
+        dex_lookup = await load_dex_lookup(db_path)
+
     tier = classify_url(url)
 
     if tier == Tier.UNKNOWN:
@@ -104,7 +158,7 @@ async def ingest_url(url: str, *, db_path: Path | None = None) -> IngestResult:
 
     draft = fetched.data
     normalized, norm_log = normalize(draft)
-    report = validate(normalized)
+    report = validate(normalized, dex_lookup=dex_lookup)
 
     if report.hard_failures:
         confidence = 0.0
@@ -132,7 +186,7 @@ async def ingest_url(url: str, *, db_path: Path | None = None) -> IngestResult:
     except Exception as exc:
         logger.exception("ingest_url: db write failed for url=%s", url)
         return IngestResult(
-            status="fetch_failed",
+            status="db_error",
             confidence=confidence,
             reason=f"db_write_error: {exc}",
         )

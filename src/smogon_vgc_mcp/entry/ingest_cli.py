@@ -24,10 +24,20 @@ async def main_async(argv: list[str], *, db_path: Path | None = None) -> int:
     if result.reason:
         print(f"reason: {result.reason}")
 
+    # Exit code mapping (for scripting / CI):
+    #   0  — persisted (auto or review_pending)
+    #   2  — rejected (URL unsupported or tier not implemented)
+    #   3  — fetch_failed (network / HTTP error)
+    #   4  — parse_failed (non-parseable content)
+    #   5  — db_error (validated team couldn't be persisted)
     if result.status in ("auto", "review_pending"):
         return 0
-    if result.status in ("fetch_failed", "parse_failed"):
+    if result.status == "fetch_failed":
         return 3
+    if result.status == "parse_failed":
+        return 4
+    if result.status == "db_error":
+        return 5
     return 2  # rejected
 
 

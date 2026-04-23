@@ -290,16 +290,29 @@ async def fetch_and_store_pokepaste_teams(
     }
 
 
+def _empty_counts() -> dict[str, int]:
+    return {
+        "auto": 0,
+        "review_pending": 0,
+        "rejected": 0,
+        "fetch_failed": 0,
+        "parse_failed": 0,
+        "db_error": 0,
+    }
+
+
 async def ingest_champions_sheet(db_path: Path | None = None) -> dict[str, int]:
     """Read the Champions Google Sheet tab and ingest each row's URL.
 
     Returns a counter dict of status -> count.
     """
+    from smogon_vgc_mcp.fetcher.ingestion.pipeline import load_dex_lookup
+
     await init_database(db_path)
     sheet_url = get_sheet_csv_url("champions_ma")
     if not sheet_url:
         logger.error("ingest_champions_sheet: no sheet_gid configured for champions_ma")
-        return {"auto": 0, "review_pending": 0, "rejected": 0, "fetch_failed": 0, "parse_failed": 0}
+        return _empty_counts()
 
     fetched = await fetch_text_resilient(sheet_url, service="sheets")
     if not fetched.success or not fetched.data:
@@ -308,30 +321,32 @@ async def ingest_champions_sheet(db_path: Path | None = None) -> dict[str, int]:
             sheet_url,
             fetched.error,
         )
-        return {"auto": 0, "review_pending": 0, "rejected": 0, "fetch_failed": 1, "parse_failed": 0}
+        counts = _empty_counts()
+        counts["fetch_failed"] = 1
+        return counts
 
     reader = csv.reader(io.StringIO(fetched.data))
     rows = list(reader)
 
-    counts: dict[str, int] = {
-        "auto": 0,
-        "review_pending": 0,
-        "rejected": 0,
-        "fetch_failed": 0,
-        "parse_failed": 0,
-    }
+    # Load the dex once for the whole run — avoids N redundant queries
+    # across a sheet of hundreds of URLs. Falls through to None (skip
+    # identity/legality checks) when the dex tables are empty.
+    dex_lookup = await load_dex_lookup(db_path)
 
+    counts = _empty_counts()
     for row in rows[1:]:
         url = next((c for c in row if c.startswith(("http://", "https://"))), "")
         if not url:
             continue
         try:
-            result = await ingest_url(url, db_path=db_path)
+            result = await ingest_url(url, db_path=db_path, dex_lookup=dex_lookup)
             counts[result.status] = counts.get(result.status, 0) + 1
         except Exception as exc:
-            # Covers normalizer/validator/DB-write crashes the pipeline
-            # didn't already catch. Bucket as fetch_failed but include
-            # the exception type so the log is diagnosable.
+            # Covers normalizer/validator crashes the pipeline didn't
+            # already catch (DB-write failures are caught in ingest_url
+            # and returned as status=db_error). Bucket unknowns as
+            # fetch_failed but include the exception type so the log is
+            # diagnosable.
             logger.exception(
                 "ingest_champions_sheet: unhandled %s for url=%s",
                 type(exc).__name__,

@@ -123,7 +123,7 @@ async def test_ingest_pokepaste_parse_exception_returns_fetch_failed(db_path: Pa
     assert "Failed to parse pokepaste" in result.reason
 
 
-async def test_ingest_db_write_failure_returns_fetch_failed(db_path: Path):
+async def test_ingest_db_write_failure_returns_db_error(db_path: Path):
     text = FIXTURE.read_text()
 
     async def boom(db, team):
@@ -140,7 +140,7 @@ async def test_ingest_db_write_failure_returns_fetch_failed(db_path: Path):
         ),
     ):
         result = await ingest_url("https://pokepast.es/dbfail", db_path=db_path)
-    assert result.status == "fetch_failed"
+    assert result.status == "db_error"
     assert result.reason is not None
     assert "db_write_error" in result.reason
     assert result.team_row_id is None
@@ -178,6 +178,66 @@ async def test_ingest_hard_failure_writes_review_pending_with_zero_confidence(db
     assert stored.ingestion_status == "review_pending"
     assert stored.review_reasons is not None
     assert "duplicate_species" in stored.review_reasons
+
+
+async def test_load_dex_lookup_returns_none_when_empty(db_path: Path):
+    from smogon_vgc_mcp.fetcher.ingestion.pipeline import load_dex_lookup
+
+    result = await load_dex_lookup(db_path)
+    assert result is None
+
+
+async def test_load_dex_lookup_builds_entries_from_populated_tables(db_path: Path):
+    from smogon_vgc_mcp.database.schema import get_connection
+    from smogon_vgc_mcp.fetcher.ingestion.pipeline import load_dex_lookup
+
+    async with get_connection(db_path) as db:
+        await db.execute(
+            "INSERT INTO champions_dex_pokemon(id, name, type1, hp, atk, def, spa, spd, spe, "
+            "ability1, ability2, ability_hidden) VALUES "
+            "('koraidon', 'Koraidon', 'Dragon', 100, 100, 100, 100, 100, 100, "
+            "'Orichalcum Pulse', NULL, NULL)"
+        )
+        await db.execute(
+            "INSERT INTO champions_dex_moves(id, name, type, category) VALUES "
+            "('flareblitz', 'Flare Blitz', 'Fire', 'Physical')"
+        )
+        await db.execute(
+            "INSERT INTO champions_dex_learnsets(pokemon_id, move_id, method) VALUES "
+            "('koraidon', 'flareblitz', 'level-up')"
+        )
+        await db.commit()
+
+    result = await load_dex_lookup(db_path)
+    assert result is not None
+    entry = result["koraidon"]
+    assert entry["abilities"] == ["Orichalcum Pulse"]
+    assert entry["moves"] == ["Flare Blitz"]
+
+
+async def test_ingest_url_uses_provided_dex_to_flag_illegal_ability(db_path: Path):
+    # Koraidon's only legal ability here is Orichalcum Pulse; the
+    # pokepaste claims "Fake Ability" so the soft failure ability_illegal
+    # must fire. Two soft failures drop confidence to 0.8 < threshold.
+    dex_lookup = {
+        "koraidon": {"abilities": ["Orichalcum Pulse"], "moves": ["Flare Blitz"]},
+    }
+    text = (
+        "Koraidon @ Life Orb\nAbility: Fake Ability\nLevel: 50\nEVs: 32 Atk\n"
+        "Adamant Nature\n- Flare Blitz\n- Flare Blitz\n- Flare Blitz\n- Flare Blitz"
+    )
+    with patch(
+        "smogon_vgc_mcp.fetcher.ingestion.pipeline.fetch_pokepaste",
+        new=AsyncMock(return_value=FetchResult.ok(text)),
+    ):
+        result = await ingest_url(
+            "https://pokepast.es/abil", db_path=db_path, dex_lookup=dex_lookup
+        )
+    assert result.team_row_id is not None
+    async with get_connection(db_path) as db:
+        stored = await get_champions_team(db, result.team_row_id)
+    assert stored.review_reasons is not None
+    assert "ability_illegal" in stored.review_reasons
 
 
 def test_score_arithmetic_matches_threshold():
