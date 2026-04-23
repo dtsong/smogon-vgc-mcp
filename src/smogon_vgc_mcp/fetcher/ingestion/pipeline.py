@@ -60,13 +60,17 @@ async def _fetch_tier1(url: str) -> FetchResult[ChampionsTeamDraft]:
     if not fetched.success or not fetched.data:
         if fetched.error is not None:
             return FetchResult.fail(fetched.error)
-        # Fetch reported success but returned no body — surface this so
-        # rate-limit HTML or empty 200 responses don't vanish silently.
+        # Empty body on a 2xx (e.g. rate-limit HTML scrubbed or a CDN
+        # 200-with-no-content). Logged at warning so the later
+        # parse_failed(empty_parse) bucket is explainable in logs.
         logger.warning("pokepaste fetch succeeded with empty body: url=%s", url)
         return FetchResult.ok(None)
     try:
         draft = parse_pokepaste_to_champions_draft(fetched.data, source_url=url)
-    except Exception as exc:
+    except (ValueError, KeyError, IndexError, AttributeError, TypeError) as exc:
+        # Narrow catch — parser bugs surface as real parse errors; let
+        # system-level failures (MemoryError, RecursionError) propagate
+        # so a resource-exhaustion crash isn't mislabeled parse_failed.
         return FetchResult.fail(
             ServiceError(
                 category=ErrorCategory.PARSE_ERROR,
@@ -140,8 +144,14 @@ async def ingest_url(
     *,
     db_path: Path | None = None,
     dex_lookup: DexLookup | None = None,
+    skip_init: bool = False,
 ) -> IngestResult:
-    await init_database(db_path)
+    # Batch callers that already initialized the DB (e.g. the sheet
+    # runner) can pass ``skip_init=True`` to avoid rerunning migrations
+    # per row. Single-URL callers leave it False so the first CLI run
+    # on a fresh install still bootstraps the schema.
+    if not skip_init:
+        await init_database(db_path)
     tier = classify_url(url)
 
     if tier == Tier.UNKNOWN:
@@ -200,7 +210,11 @@ async def ingest_url(
     try:
         async with get_connection(db_path) as db:
             row_id = await write_or_queue_team(db, team)
-    except Exception as exc:
+    except (aiosqlite.Error, OSError) as exc:
+        # Narrow catch — only genuine DB/disk failures map to db_error.
+        # Programmer bugs (TypeError/AttributeError) propagate so they
+        # surface as real crashes instead of silently re-queuing under
+        # a misleading "retry the DB write" signal.
         logger.exception("ingest_url: db write failed for url=%s", url)
         return IngestResult(
             status="db_error",

@@ -90,23 +90,49 @@ async def test_ingest_champions_sheet_initializes_fresh_db(tmp_path: Path):
     assert report["auto"] == 1
 
 
-async def test_ingest_champions_sheet_returns_empty_when_no_sheet_gid(db_path: Path):
-    # Guard against config drift: if champions_ma ever loses its
-    # sheet_gid, ingest_champions_sheet must return a fully-formed
-    # counter dict (not raise, not return a partial dict) so callers
-    # can still parse the result.
+async def test_ingest_champions_sheet_no_sheet_gid_signals_fetch_failed(db_path: Path):
+    # Config drift (missing sheet_gid) must surface in the counter dict
+    # so scripts that compare counts against zero can distinguish it
+    # from a successful run over an empty sheet.
     with patch(
         "smogon_vgc_mcp.fetcher.sheets.get_sheet_csv_url",
         return_value=None,
     ):
         report = await ingest_champions_sheet(db_path=db_path)
+    assert report["fetch_failed"] == 1
     assert report["auto"] == 0
     assert report["review_pending"] == 0
     assert report["rejected"] == 0
-    assert report["fetch_failed"] == 0
     assert report["parse_failed"] == 0
     assert report["db_error"] == 0
     assert report["unexpected_error"] == 0
+
+
+async def test_ingest_champions_sheet_empty_body_signals_fetch_failed(db_path: Path):
+    # A success-but-empty-body response (e.g. a 200 that returned
+    # scrubbed HTML or a CDN stub) must still land in fetch_failed —
+    # the guard on ``not fetched.data`` covers both None and "".
+    with patch(
+        "smogon_vgc_mcp.fetcher.sheets.fetch_text_resilient",
+        new=AsyncMock(return_value=FetchResult.ok(None)),
+    ):
+        report = await ingest_champions_sheet(db_path=db_path)
+    assert report["fetch_failed"] == 1
+    assert report["auto"] == 0
+
+
+async def test_ingest_champions_sheet_rows_without_urls_are_skipped(db_path: Path):
+    # Rows with no http(s) URL column must be silently skipped — no
+    # crash, no counter increment. Guards against a regression where
+    # the ``if not url: continue`` check is removed.
+    header_only_csv = "Owner,Tournament,Rank,URL\nAlice,Regional,Top 8,\nBob,Regional,Winner,\n"
+    with patch(
+        "smogon_vgc_mcp.fetcher.sheets.fetch_text_resilient",
+        new=AsyncMock(return_value=FetchResult.ok(header_only_csv)),
+    ):
+        report = await ingest_champions_sheet(db_path=db_path)
+    # No URLs → all counters stay at zero.
+    assert all(v == 0 for v in report.values())
 
 
 async def test_ingest_champions_sheet_per_row_exception_isolated(db_path: Path):

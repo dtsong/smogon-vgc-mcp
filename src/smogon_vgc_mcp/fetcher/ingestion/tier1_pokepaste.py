@@ -1,8 +1,12 @@
 """Tier 1 pokepaste handler for Champions ingestion.
 
 Reuses the existing pokepaste parser and maps its EV fields directly
-onto Champions SP fields (same numeric values, same ``EVs:`` line
-syntax — the numbers are reinterpreted as Stat Points).
+onto Champions SP fields (same ``EVs:`` line syntax — the numbers are
+reinterpreted as Stat Points). Standard VGC spreads (e.g. 252/252/4)
+will exceed Champions SP bounds (max 32 per stat, 66 total) and fail
+validation as hard failures; this is intentional — the ingestion
+pipeline uses the validator to reject non-Champions pastes rather
+than silently truncating the values.
 """
 
 from __future__ import annotations

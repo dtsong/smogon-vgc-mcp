@@ -54,13 +54,15 @@ async def test_cli_parse_failed_exit_four(db_path: Path, capsys):
 
 async def test_cli_db_error_exit_five(db_path: Path, capsys):
     # DB write failure → db_error → exit code 5.
+    import aiosqlite
+
     pokepaste_text = (
         "Koraidon @ Life Orb\nAbility: Orichalcum Pulse\nLevel: 50\nEVs: 32 Atk\n"
         "Adamant Nature\n- Flare Blitz\n- Protect\n- Collision Course\n- Dragon Claw"
     )
 
     async def boom(db, team):
-        raise RuntimeError("disk full")
+        raise aiosqlite.OperationalError("disk full")
 
     with (
         patch(
@@ -74,6 +76,27 @@ async def test_cli_db_error_exit_five(db_path: Path, capsys):
     ):
         exit_code = await main_async(["https://pokepast.es/dbfail"], db_path=db_path)
     assert exit_code == 5
+
+
+async def test_cli_review_pending_exit_zero(db_path: Path, capsys):
+    # Two soft failures (nature + tera unknown) drop confidence below
+    # AUTO_WRITE_THRESHOLD, producing review_pending — which is still a
+    # successful persist and must map to exit 0 (same as auto). CI
+    # scripts key on exit code, so a regression that separates
+    # review_pending into nonzero would silently break dashboards.
+    text = (
+        "Koraidon @ Life Orb\nAbility: Orichalcum Pulse\nLevel: 50\n"
+        "Tera Type: Plasma\nEVs: 32 Atk\nFooNature Nature\n"
+        "- Flare Blitz\n- Protect\n- Collision Course\n- Dragon Claw"
+    )
+    with patch(
+        "smogon_vgc_mcp.fetcher.ingestion.pipeline.fetch_pokepaste",
+        new=AsyncMock(return_value=FetchResult.ok(text)),
+    ):
+        exit_code = await main_async(["https://pokepast.es/soft"], db_path=db_path)
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "review_pending" in captured.out.lower()
 
 
 async def test_cli_fetch_failed_exit_three(db_path: Path, capsys):

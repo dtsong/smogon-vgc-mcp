@@ -404,7 +404,7 @@ CREATE INDEX IF NOT EXISTS idx_champ_pokemon_usage_snap
 # =============================================================================
 # Four additive tables. All rows are per-WordPress-post, per-stage state is
 # tracked via *_status columns so the ingest pipeline is idempotent and
-# resumable. See docs/nugget-bridge.md (PR3) for the pipeline diagram.
+# resumable.
 
 NUGGET_BRIDGE_SCHEMA = """
 -- Raw WordPress post payload + per-stage pipeline state

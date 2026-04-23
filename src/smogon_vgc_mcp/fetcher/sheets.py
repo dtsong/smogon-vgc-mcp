@@ -310,8 +310,13 @@ async def ingest_champions_sheet(db_path: Path | None = None) -> dict[str, int]:
     await init_database(db_path)
     sheet_url = get_sheet_csv_url("champions_ma")
     if not sheet_url:
+        # Signal config drift via fetch_failed so callers comparing
+        # counters against zero can't mistake a missing sheet_gid for a
+        # successful run over an empty sheet.
         logger.error("ingest_champions_sheet: no sheet_gid configured for champions_ma")
-        return _empty_counts()
+        counts = _empty_counts()
+        counts["fetch_failed"] = 1
+        return counts
 
     fetched = await fetch_text_resilient(sheet_url, service="sheets")
     if not fetched.success or not fetched.data:
@@ -338,7 +343,7 @@ async def ingest_champions_sheet(db_path: Path | None = None) -> dict[str, int]:
         if not url:
             continue
         try:
-            result = await ingest_url(url, db_path=db_path, dex_lookup=dex_lookup)
+            result = await ingest_url(url, db_path=db_path, dex_lookup=dex_lookup, skip_init=True)
             counts[result.status] = counts.get(result.status, 0) + 1
         except Exception as exc:
             # Covers normalizer/validator crashes the pipeline didn't

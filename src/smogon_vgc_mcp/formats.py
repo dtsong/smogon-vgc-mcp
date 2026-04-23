@@ -126,6 +126,9 @@ FORMATS: dict[str, FormatConfig] = {
         available_months=[],
         generation=7,
         smogon_stats_available=False,
+        # Date range intentionally starts Sept 2016 (Sun/Moon release
+        # window) even though the code year is 2017 — the competitive
+        # VGC17 season opened before calendar 2017.
         date_range=("2016-09-01", "2017-12-31"),
         is_historical=True,
     ),

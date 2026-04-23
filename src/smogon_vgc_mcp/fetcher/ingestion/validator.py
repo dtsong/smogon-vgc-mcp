@@ -94,6 +94,7 @@ TYPES = frozenset(
         "Dark",
         "Steel",
         "Fairy",
+        "Stellar",
     }
 )
 
@@ -147,8 +148,8 @@ def validate(
     (``pokemon_unknown``) and ability/move-legality
     (``ability_illegal`` / ``move_illegal``) checks are skipped — the
     caller is responsible for supplying a dex when those checks are
-    desired. SP numeric, team-shape, and nature/tera vocab checks
-    always run.
+    desired. SP numeric, team-shape, nature/tera vocab, and move-count
+    checks always run regardless of ``dex_lookup``.
     """
     hard: list[str] = []
     soft: list[str] = []

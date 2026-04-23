@@ -43,7 +43,7 @@ def compute_team_fingerprint(pokemon: list[ChampionsTeamPokemon]) -> str:
                 moves,
             )
         )
-    digest = hashlib.sha256(json.dumps(canonical, sort_keys=True).encode()).hexdigest()
+    digest = hashlib.sha256(json.dumps(canonical).encode()).hexdigest()
     return digest[:16]
 
 
@@ -57,8 +57,10 @@ async def write_or_queue_team(db: aiosqlite.Connection, team: ChampionsTeam) -> 
     prior row first.
 
     Commits internally; the caller should not wrap this in its own
-    transaction expecting to rollback. Also sets ``db.row_factory`` to
-    ``aiosqlite.Row`` on the connection.
+    transaction expecting to rollback. Permanently mutates
+    ``db.row_factory`` on the caller's connection to ``aiosqlite.Row``;
+    any subsequent query on the same connection will receive ``Row``
+    objects instead of plain tuples.
     """
     db.row_factory = aiosqlite.Row
 

@@ -138,10 +138,12 @@ async def test_ingest_whitespace_body_returns_parse_failed(db_path: Path):
 
 
 async def test_ingest_db_write_failure_returns_db_error(db_path: Path):
+    import aiosqlite
+
     text = FIXTURE.read_text()
 
     async def boom(db, team):
-        raise RuntimeError("disk full")
+        raise aiosqlite.OperationalError("disk full")
 
     with (
         patch(
@@ -277,6 +279,23 @@ async def test_ingest_url_uses_provided_dex_to_flag_illegal_ability(db_path: Pat
         stored = await get_champions_team(db, result.team_row_id)
     assert stored.review_reasons is not None
     assert "ability_illegal" in stored.review_reasons
+
+
+async def test_ingest_same_url_twice_dedups_to_same_row(db_path: Path):
+    # Re-ingesting the same URL must yield the same team_row_id via
+    # the ``(format, team_id)`` dedup path in ``write_or_queue_team``
+    # — guards the champions-sheet re-run contract.
+    text = FIXTURE.read_text()
+    with patch(
+        "smogon_vgc_mcp.fetcher.ingestion.pipeline.fetch_pokepaste",
+        new=AsyncMock(return_value=FetchResult.ok(text)),
+    ):
+        first = await ingest_url("https://pokepast.es/dedup", db_path=db_path)
+        second = await ingest_url("https://pokepast.es/dedup", db_path=db_path)
+    assert first.status == "auto"
+    assert second.status == "auto"
+    assert first.team_row_id is not None
+    assert first.team_row_id == second.team_row_id
 
 
 def test_score_arithmetic_matches_threshold():

@@ -237,6 +237,30 @@ def test_move_count_zero_soft():
     assert "move_count" in rep.soft_failures
 
 
+def test_soft_failure_codes_deduped_across_pokemon():
+    # Two pokemon both with illegal abilities must still produce
+    # exactly one ``ability_illegal`` entry — the outer validator loop
+    # dedupes soft codes across the whole team so the review UI shows
+    # each reason once regardless of how many pokemon trigger it.
+    rep = validate(
+        _draft(
+            ChampionsTeamPokemon(slot=1, pokemon="Flutter Mane", ability="Levitate"),
+            ChampionsTeamPokemon(slot=2, pokemon="Koraidon", ability="Drought"),
+        ),
+        dex_lookup=FAKE_DEX,
+    )
+    assert rep.soft_failures.count("ability_illegal") == 1
+
+
+def test_stellar_tera_is_accepted():
+    # Stellar was added in Gen 9 DLC2 and is a legal tera for
+    # restricted Paradox legends; it must not be flagged as unknown.
+    rep = validate(
+        _draft(ChampionsTeamPokemon(slot=1, pokemon="Koraidon", tera_type="Stellar")),
+    )
+    assert "tera_type_unknown" not in rep.soft_failures
+
+
 def test_move_count_four_ok():
     rep = validate(
         _draft(
