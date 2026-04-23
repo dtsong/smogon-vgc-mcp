@@ -1,0 +1,21 @@
+Koraidon @ Life Orb
+Ability: Orichalcum Pulse
+Level: 50
+Tera Type: Fire
+EVs: 32 Atk / 32 Spe
+Adamant Nature
+- Flare Blitz
+- Collision Course
+- Protect
+- Dragon Claw
+
+Flutter Mane @ Focus Sash
+Ability: Protosynthesis
+Level: 50
+Tera Type: Fairy
+EVs: 32 SpA / 32 Spe
+Timid Nature
+- Moonblast
+- Shadow Ball
+- Protect
+- Dazzling Gleam
