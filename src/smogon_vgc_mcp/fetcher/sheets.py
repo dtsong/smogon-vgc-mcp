@@ -5,10 +5,12 @@ import csv
 import io
 import logging
 import re
+from pathlib import Path
 
 import aiosqlite
 
 from smogon_vgc_mcp.database.schema import get_connection, get_db_path, init_database
+from smogon_vgc_mcp.fetcher.ingestion.pipeline import ingest_url, load_dex_lookup
 from smogon_vgc_mcp.fetcher.pokepaste import fetch_pokepaste, parse_pokepaste
 from smogon_vgc_mcp.formats import DEFAULT_FORMAT, get_format, get_sheet_csv_url
 from smogon_vgc_mcp.resilience import (
@@ -286,3 +288,75 @@ async def fetch_and_store_pokepaste_teams(
         "skipped_details": skipped[:10],
         "circuit_states": get_all_circuit_states(),
     }
+
+
+def _empty_counts() -> dict[str, int]:
+    return {
+        "auto": 0,
+        "review_pending": 0,
+        "rejected": 0,
+        "fetch_failed": 0,
+        "parse_failed": 0,
+        "db_error": 0,
+        "unexpected_error": 0,
+    }
+
+
+async def ingest_champions_sheet(db_path: Path | None = None) -> dict[str, int]:
+    """Read the Champions Google Sheet tab and ingest each row's URL.
+
+    Returns a counter dict of status -> count.
+    """
+    await init_database(db_path)
+    sheet_url = get_sheet_csv_url("champions_ma")
+    if not sheet_url:
+        # Signal config drift via fetch_failed so callers comparing
+        # counters against zero can't mistake a missing sheet_gid for a
+        # successful run over an empty sheet.
+        logger.error("ingest_champions_sheet: no sheet_gid configured for champions_ma")
+        counts = _empty_counts()
+        counts["fetch_failed"] = 1
+        return counts
+
+    fetched = await fetch_text_resilient(sheet_url, service="sheets")
+    if not fetched.success or not fetched.data:
+        logger.error(
+            "ingest_champions_sheet: failed to fetch sheet sheet_url=%s error=%s",
+            sheet_url,
+            fetched.error,
+        )
+        counts = _empty_counts()
+        counts["fetch_failed"] = 1
+        return counts
+
+    reader = csv.reader(io.StringIO(fetched.data))
+    rows = list(reader)
+
+    # Load the dex once for the whole run — avoids N redundant queries
+    # across a sheet of hundreds of URLs. Falls through to None (skip
+    # identity/legality checks) when the dex tables are empty.
+    dex_lookup = await load_dex_lookup(db_path)
+
+    counts = _empty_counts()
+    for row in rows[1:]:
+        url = next((c for c in row if c.startswith(("http://", "https://"))), "")
+        if not url:
+            continue
+        try:
+            result = await ingest_url(url, db_path=db_path, dex_lookup=dex_lookup, skip_init=True)
+            counts[result.status] = counts.get(result.status, 0) + 1
+        except (aiosqlite.Error, OSError, RuntimeError) as exc:
+            # Narrow catch: genuine DB/disk/runtime failures on a single
+            # row shouldn't abort the whole sheet. Programmer bugs
+            # (TypeError, AttributeError, KeyError, etc.) are NOT caught
+            # here — they surface as real crashes so regressions in the
+            # normalizer/validator/parser are immediately visible rather
+            # than silently inflating an ``unexpected_error`` counter.
+            logger.exception(
+                "ingest_champions_sheet: unhandled %s for url=%s",
+                type(exc).__name__,
+                url,
+            )
+            counts["unexpected_error"] = counts.get("unexpected_error", 0) + 1
+
+    return counts

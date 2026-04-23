@@ -64,6 +64,7 @@ FORMATS: dict[str, FormatConfig] = {
         stat_system="champions_sp",
         calc_backend="python_native",
         smogon_stats_available=False,
+        sheet_gid="791705272",
         is_current=False,
     ),
     # Historical archives — Nugget Bridge corpus (2012-2017). No live stats,
@@ -125,6 +126,9 @@ FORMATS: dict[str, FormatConfig] = {
         available_months=[],
         generation=7,
         smogon_stats_available=False,
+        # Date range intentionally starts Sept 2016 (Sun/Moon release
+        # window) even though the code year is 2017 — the competitive
+        # VGC17 season opened before calendar 2017.
         date_range=("2016-09-01", "2017-12-31"),
         is_historical=True,
     ),
