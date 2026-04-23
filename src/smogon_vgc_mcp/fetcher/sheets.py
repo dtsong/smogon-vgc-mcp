@@ -303,6 +303,11 @@ async def ingest_champions_sheet(db_path: Path | None = None) -> dict[str, int]:
 
     fetched = await fetch_text_resilient(sheet_url, service="sheets")
     if not fetched.success or not fetched.data:
+        logger.error(
+            "ingest_champions_sheet: failed to fetch sheet sheet_url=%s error=%s",
+            sheet_url,
+            fetched.error,
+        )
         return {"auto": 0, "review_pending": 0, "rejected": 0, "fetch_failed": 1, "parse_failed": 0}
 
     reader = csv.reader(io.StringIO(fetched.data))
@@ -323,8 +328,8 @@ async def ingest_champions_sheet(db_path: Path | None = None) -> dict[str, int]:
         try:
             result = await ingest_url(url, db_path=db_path)
             counts[result.status] = counts.get(result.status, 0) + 1
-        except Exception as exc:
-            logger.error("ingest_champions_sheet: unhandled error for url=%s: %s", url, exc)
+        except Exception:
+            logger.exception("ingest_champions_sheet: unhandled error for url=%s", url)
             counts["fetch_failed"] = counts.get("fetch_failed", 0) + 1
 
     return counts
