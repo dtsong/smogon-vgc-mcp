@@ -74,6 +74,28 @@ async def test_duplicate_fingerprint_returns_existing(db_path: Path):
     assert id1 == id2
 
 
+async def test_duplicate_fingerprint_preserves_original_payload(db_path: Path):
+    # Dedup is last-write-wins-NO — on (format, team_id) collision the
+    # existing row is returned untouched. A re-ingest with corrected
+    # source_url / review_reasons MUST NOT silently overwrite the first
+    # row. Document this via test so a future "update on conflict" PR
+    # has to change the test too.
+    first = _team(ChampionsTeamPokemon(slot=1, pokemon="Koraidon"), fingerprint="same_fp")
+    first.source_url = "https://pokepast.es/original"
+    second = _team(ChampionsTeamPokemon(slot=1, pokemon="Koraidon"), fingerprint="same_fp")
+    second.source_url = "https://pokepast.es/edited"
+    second.review_reasons = ["nature_unknown"]
+
+    async with get_connection(db_path) as db:
+        id1 = await write_or_queue_team(db, first)
+        id2 = await write_or_queue_team(db, second)
+        stored = await get_champions_team(db, id1)
+    assert id1 == id2
+    assert stored is not None
+    assert stored.source_url == "https://pokepast.es/original"
+    assert stored.review_reasons is None
+
+
 async def test_review_reasons_persisted(db_path: Path):
     team = _team(
         ChampionsTeamPokemon(slot=1, pokemon="X"),

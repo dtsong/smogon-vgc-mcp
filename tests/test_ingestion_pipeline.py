@@ -201,6 +201,31 @@ async def test_load_dex_lookup_returns_none_when_empty(db_path: Path):
     assert result is None
 
 
+async def test_load_dex_lookup_returns_none_on_db_error(db_path: Path):
+    # A corrupt/missing dex table must not take down the pipeline — the
+    # narrow `(aiosqlite.Error, OSError)` guard in load_dex_lookup turns
+    # DB failure into a skip-signal (None) so SP/shape/vocab validation
+    # can still proceed. Guards against a regression that widens or
+    # removes the except clause.
+    import aiosqlite
+
+    from smogon_vgc_mcp.fetcher.ingestion.pipeline import load_dex_lookup
+
+    class FailingConn:
+        async def __aenter__(self):
+            raise aiosqlite.OperationalError("simulated corrupt dex")
+
+        async def __aexit__(self, *_):
+            return False
+
+    with patch(
+        "smogon_vgc_mcp.fetcher.ingestion.pipeline.get_connection",
+        return_value=FailingConn(),
+    ):
+        result = await load_dex_lookup(db_path)
+    assert result is None
+
+
 async def test_load_dex_lookup_builds_entries_from_populated_tables(db_path: Path):
     from smogon_vgc_mcp.database.schema import get_connection
     from smogon_vgc_mcp.fetcher.ingestion.pipeline import load_dex_lookup

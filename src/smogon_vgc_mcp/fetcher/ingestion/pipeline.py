@@ -115,10 +115,11 @@ async def load_dex_lookup(db_path: Path | None = None) -> DexLookup | None:
                 JOIN champions_dex_moves m ON m.id = l.move_id
                 """
             )
-    except Exception:
+    except (aiosqlite.Error, OSError):
         # A missing/corrupt dex should not take down the whole ingest
         # run. Skip the optional checks and let the pipeline proceed on
-        # SP/shape/vocab validation alone.
+        # SP/shape/vocab validation alone. Narrower than `Exception` so
+        # programming bugs (TypeError, KeyError) still surface.
         logger.exception("load_dex_lookup: failed to load champions dex; skipping identity checks")
         return None
 

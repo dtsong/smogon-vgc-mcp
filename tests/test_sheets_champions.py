@@ -106,6 +106,7 @@ async def test_ingest_champions_sheet_returns_empty_when_no_sheet_gid(db_path: P
     assert report["fetch_failed"] == 0
     assert report["parse_failed"] == 0
     assert report["db_error"] == 0
+    assert report["unexpected_error"] == 0
 
 
 async def test_ingest_champions_sheet_per_row_exception_isolated(db_path: Path):
@@ -134,6 +135,9 @@ async def test_ingest_champions_sheet_per_row_exception_isolated(db_path: Path):
     ):
         report = await ingest_champions_sheet(db_path=db_path)
 
-    # First row crashes → fetch_failed, second succeeds → auto
-    assert report["fetch_failed"] == 1
+    # First row crashes inside the pipeline (not a FetchResult.fail) →
+    # unexpected_error bucket; the sheet-level fetch_failed bucket is
+    # reserved for the sheet-fetch itself failing.
+    assert report["unexpected_error"] == 1
+    assert report["fetch_failed"] == 0
     assert report["auto"] == 1

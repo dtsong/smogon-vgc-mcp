@@ -7,6 +7,10 @@ ChampionsSourceType = Literal["sheet", "pokepaste", "x", "blog"]
 # Only statuses actually persisted to champions_teams.ingestion_status.
 # Transient pipeline outcomes (fetch_failed / parse_failed / db_error /
 # rejected) are represented on IngestResult, not on ChampionsTeam.
+# "labeled" is reserved for a post-ingestion human-review workflow
+# (not the ingest pipeline itself — the pipeline only writes "auto" or
+# "review_pending"); it marks teams whose review_reasons have been
+# manually triaged.
 ChampionsIngestionStatus = Literal["auto", "review_pending", "labeled"]
 
 

@@ -298,6 +298,7 @@ def _empty_counts() -> dict[str, int]:
         "fetch_failed": 0,
         "parse_failed": 0,
         "db_error": 0,
+        "unexpected_error": 0,
     }
 
 
@@ -342,14 +343,14 @@ async def ingest_champions_sheet(db_path: Path | None = None) -> dict[str, int]:
         except Exception as exc:
             # Covers normalizer/validator crashes the pipeline didn't
             # already catch (DB-write failures are caught in ingest_url
-            # and returned as status=db_error). Bucket unknowns as
-            # fetch_failed but include the exception type so the log is
-            # diagnosable.
+            # and returned as status=db_error). Bucket separately from
+            # fetch_failed so operators can distinguish network issues
+            # from code bugs.
             logger.exception(
                 "ingest_champions_sheet: unhandled %s for url=%s",
                 type(exc).__name__,
                 url,
             )
-            counts["fetch_failed"] = counts.get("fetch_failed", 0) + 1
+            counts["unexpected_error"] = counts.get("unexpected_error", 0) + 1
 
     return counts

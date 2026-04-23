@@ -50,6 +50,12 @@ def compute_team_fingerprint(pokemon: list[ChampionsTeamPokemon]) -> str:
 async def write_or_queue_team(db: aiosqlite.Connection, team: ChampionsTeam) -> int:
     """Insert the team. Returns the row id. Duplicate (format, team_id) returns existing id.
 
+    Dedup is by ``(format, team_id)`` — on collision the *existing* row
+    is returned untouched; the new ``team`` payload (including its
+    ``source_url``, ``review_reasons``, and Pokemon rows) is discarded.
+    Callers that need update-on-conflict semantics must delete the
+    prior row first.
+
     Commits internally; the caller should not wrap this in its own
     transaction expecting to rollback. Also sets ``db.row_factory`` to
     ``aiosqlite.Row`` on the connection.
