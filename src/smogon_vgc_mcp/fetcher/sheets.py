@@ -328,8 +328,15 @@ async def ingest_champions_sheet(db_path: Path | None = None) -> dict[str, int]:
         try:
             result = await ingest_url(url, db_path=db_path)
             counts[result.status] = counts.get(result.status, 0) + 1
-        except Exception:
-            logger.exception("ingest_champions_sheet: unhandled error for url=%s", url)
+        except Exception as exc:
+            # Covers normalizer/validator/DB-write crashes the pipeline
+            # didn't already catch. Bucket as fetch_failed but include
+            # the exception type so the log is diagnosable.
+            logger.exception(
+                "ingest_champions_sheet: unhandled %s for url=%s",
+                type(exc).__name__,
+                url,
+            )
             counts["fetch_failed"] = counts.get("fetch_failed", 0) + 1
 
     return counts

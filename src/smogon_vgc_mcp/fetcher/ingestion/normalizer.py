@@ -8,9 +8,12 @@ raw extraction and final values.
 
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 
 from smogon_vgc_mcp.database.models import ChampionsTeamDraft, ChampionsTeamPokemon
+
+_CONSUMED_RE = re.compile(r"\(consumed\)", flags=re.IGNORECASE)
 
 # Minimal alias table — extend as real data exposes gaps. Keys are
 # casefolded inputs; values are canonical Pokemon names in the dex.
@@ -76,8 +79,8 @@ def _normalize_pokemon(
             log.append(f"tera_case:{poke.tera_type}->{title}")
             updates["tera_type"] = title
 
-    if poke.item and "(consumed)" in poke.item.casefold():
-        stripped = poke.item.replace("(consumed)", "").replace("(Consumed)", "").strip()
+    if poke.item and _CONSUMED_RE.search(poke.item):
+        stripped = _CONSUMED_RE.sub("", poke.item).strip()
         log.append(f"item_strip_consumed:{poke.item}->{stripped}")
         updates["item"] = stripped
 

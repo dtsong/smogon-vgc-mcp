@@ -84,3 +84,27 @@ async def test_sp_total_constraint_enforced(db):
             "INSERT INTO champions_team_pokemon(team_id, slot, pokemon, "
             "sp_hp, sp_atk, sp_def) VALUES (1, 1, 'Koraidon', 32, 32, 10)"
         )
+
+
+async def test_slot_constraint_enforced_low(db):
+    await db.execute(
+        "INSERT INTO champions_teams(format, team_id, source_type, source_url, "
+        "ingestion_status, confidence_score) VALUES "
+        "('champions_ma', 't3', 'pokepaste', 'https://x', 'auto', 1.0)"
+    )
+    with pytest.raises(Exception):
+        await db.execute(
+            "INSERT INTO champions_team_pokemon(team_id, slot, pokemon) VALUES (1, 0, 'Koraidon')"
+        )
+
+
+async def test_slot_constraint_enforced_high(db):
+    await db.execute(
+        "INSERT INTO champions_teams(format, team_id, source_type, source_url, "
+        "ingestion_status, confidence_score) VALUES "
+        "('champions_ma', 't4', 'pokepaste', 'https://x', 'auto', 1.0)"
+    )
+    with pytest.raises(Exception):
+        await db.execute(
+            "INSERT INTO champions_team_pokemon(team_id, slot, pokemon) VALUES (1, 7, 'Koraidon')"
+        )

@@ -48,3 +48,40 @@ def test_item_strip_consumed():
     d = _draft(ChampionsTeamPokemon(slot=1, pokemon="X", item="Focus Sash (consumed)"))
     normed, log = normalize(d)
     assert normed.pokemon[0].item == "Focus Sash"
+
+
+def test_item_strip_consumed_uppercase():
+    d = _draft(ChampionsTeamPokemon(slot=1, pokemon="X", item="Focus Sash (CONSUMED)"))
+    normed, log = normalize(d)
+    assert normed.pokemon[0].item == "Focus Sash"
+    assert any("item_strip_consumed" in entry for entry in log)
+
+
+def test_item_strip_consumed_titlecase():
+    d = _draft(ChampionsTeamPokemon(slot=1, pokemon="X", item="Focus Sash (Consumed)"))
+    normed, log = normalize(d)
+    assert normed.pokemon[0].item == "Focus Sash"
+    assert any("item_strip_consumed" in entry for entry in log)
+
+
+def test_move_fuzzy_match_distance_1():
+    # Single-character typo — should be corrected.
+    d = _draft(ChampionsTeamPokemon(slot=1, pokemon="X", move1="Protct"))
+    normed, log = normalize(d, known_moves={"Protect"})
+    assert normed.pokemon[0].move1 == "Protect"
+    assert any("move_fuzzy" in entry for entry in log)
+
+
+def test_move_fuzzy_match_distance_3_rejected():
+    # Three edits — past the distance-2 threshold; must stay unchanged.
+    d = _draft(ChampionsTeamPokemon(slot=1, pokemon="X", move1="Protxyz"))
+    normed, log = normalize(d, known_moves={"Protect"})
+    assert normed.pokemon[0].move1 == "Protxyz"
+    assert not any("move_fuzzy" in entry for entry in log)
+
+
+def test_pokemon_alias_no_op_when_already_canonical():
+    d = _draft(ChampionsTeamPokemon(slot=1, pokemon="Urshifu-Single-Strike"))
+    normed, log = normalize(d)
+    assert normed.pokemon[0].pokemon == "Urshifu-Single-Strike"
+    assert not any("pokemon_alias" in entry for entry in log)

@@ -1,9 +1,8 @@
 """Tier 1 pokepaste handler for Champions ingestion.
 
-Reuses the existing pokepaste parser and translates its Gen 9 EV
-output directly into Champions SP fields (same numeric values — a
-pokepaste authored for Champions uses identical text syntax but the
-numbers now represent Stat Points).
+Reuses the existing pokepaste parser and maps its EV fields directly
+onto Champions SP fields (same numeric values, same ``EVs:`` line
+syntax — the numbers are reinterpreted as Stat Points).
 """
 
 from __future__ import annotations

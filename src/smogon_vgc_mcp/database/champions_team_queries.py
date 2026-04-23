@@ -11,7 +11,11 @@ from smogon_vgc_mcp.database.models import ChampionsTeam, ChampionsTeamPokemon
 
 
 def compute_team_fingerprint(pokemon: list[ChampionsTeamPokemon]) -> str:
-    """Stable SHA256 of the team's structural content.
+    """Stable 16-hex-char prefix of SHA256 over the team's structure.
+
+    The full SHA256 digest is truncated to its first 16 hex characters
+    (64 bits) — collision probability is negligible at champion-team
+    volumes but note the hash is not full-strength.
 
     Pokemon are sorted by ``(slot, pokemon)`` and moves within a set
     are sorted before hashing — reordering moves within a slot does
@@ -43,7 +47,12 @@ def compute_team_fingerprint(pokemon: list[ChampionsTeamPokemon]) -> str:
 
 
 async def write_or_queue_team(db: aiosqlite.Connection, team: ChampionsTeam) -> int:
-    """Insert the team. Returns the row id. Duplicate (format, team_id) returns existing id."""
+    """Insert the team. Returns the row id. Duplicate (format, team_id) returns existing id.
+
+    Commits internally; the caller should not wrap this in its own
+    transaction expecting to rollback. Also sets ``db.row_factory`` to
+    ``aiosqlite.Row`` on the connection.
+    """
     db.row_factory = aiosqlite.Row
 
     existing = await db.execute_fetchall(

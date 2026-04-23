@@ -141,6 +141,15 @@ def validate(
     *,
     dex_lookup: DexLookup | None = None,
 ) -> ValidationReport:
+    """Validate a draft. Returns hard (reject) and soft (warn) reason codes.
+
+    When ``dex_lookup`` is ``None`` the species-legality
+    (``pokemon_unknown``) and ability/move-legality
+    (``ability_illegal`` / ``move_illegal``) checks are skipped — the
+    caller is responsible for supplying a dex when those checks are
+    desired. SP numeric, team-shape, and nature/tera vocab checks
+    always run.
+    """
     hard: list[str] = []
     soft: list[str] = []
 

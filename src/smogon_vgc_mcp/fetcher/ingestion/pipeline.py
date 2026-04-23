@@ -1,7 +1,9 @@
 """Top-level ingestion orchestrator.
 
 Routes a URL through the classifier to the appropriate tier handler,
-then normalizes, validates, and writes (or queues) the result.
+then normalizes, validates, and writes the team to ChampionsTeam with
+either ``auto`` or ``review_pending`` ingestion_status based on
+confidence.
 
 Additional tiers are added by inserting a branch in ``ingest_url``
 and wiring a ``_fetch_tierN`` coroutine.
@@ -34,8 +36,9 @@ logger = logging.getLogger(__name__)
 AUTO_WRITE_THRESHOLD = 0.85
 
 IngestStatus = Literal["auto", "review_pending", "fetch_failed", "parse_failed", "rejected"]
-# Subset actually persisted to ChampionsTeam.ingestion_status — terminal
-# statuses (fetch_failed, parse_failed, rejected) return before any DB write.
+# Subset actually persisted to ChampionsTeam.ingestion_status. Other
+# IngestStatus values are transient: either we never got to a DB write
+# (fetch_failed / parse_failed / rejected) or the write itself raised.
 WrittenIngestionStatus = Literal["auto", "review_pending"]
 
 
@@ -52,6 +55,9 @@ async def _fetch_tier1(url: str) -> FetchResult[ChampionsTeamDraft]:
     if not fetched.success or not fetched.data:
         if fetched.error is not None:
             return FetchResult.fail(fetched.error)
+        # Fetch reported success but returned no body — surface this so
+        # rate-limit HTML or empty 200 responses don't vanish silently.
+        logger.warning("pokepaste fetch succeeded with empty body: url=%s", url)
         return FetchResult.ok(None)
     try:
         draft = parse_pokepaste_to_champions_draft(fetched.data, source_url=url)
@@ -70,6 +76,7 @@ async def _fetch_tier1(url: str) -> FetchResult[ChampionsTeamDraft]:
 
 
 def _score(draft: ChampionsTeamDraft, soft_count: int) -> float:
+    """Tier baseline minus 0.1 per soft-failure code, clamped at 0.0."""
     return max(0.0, draft.tier_baseline_confidence - 0.1 * soft_count)
 
 
@@ -88,7 +95,10 @@ async def ingest_url(url: str, *, db_path: Path | None = None) -> IngestResult:
         return IngestResult(status="rejected", reason="tier_not_implemented")
 
     if not fetched.success:
-        return IngestResult(status="fetch_failed", reason=str(fetched.error))
+        # ServiceError.message is the actionable text; its dataclass repr
+        # buries the message behind category/service/is_recoverable noise.
+        reason = fetched.error.message if fetched.error is not None else "unknown_error"
+        return IngestResult(status="fetch_failed", reason=reason)
     if fetched.data is None:
         return IngestResult(status="parse_failed", reason="empty_parse")
 

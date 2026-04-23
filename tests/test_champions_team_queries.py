@@ -108,3 +108,19 @@ def test_fingerprint_different_when_sets_differ():
     team_a = _team(ChampionsTeamPokemon(slot=1, pokemon="Koraidon"))
     team_b = _team(ChampionsTeamPokemon(slot=1, pokemon="Flutter Mane"))
     assert compute_team_fingerprint(team_a.pokemon) != compute_team_fingerprint(team_b.pokemon)
+
+
+async def test_get_champions_team_returns_none_when_missing(db_path: Path):
+    async with get_connection(db_path) as db:
+        out = await get_champions_team(db, row_id=99999)
+    assert out is None
+
+
+async def test_duplicate_fingerprint_isolated_per_format(db_path: Path):
+    team_a = _team(ChampionsTeamPokemon(slot=1, pokemon="Koraidon"), fingerprint="shared_fp")
+    team_b = _team(ChampionsTeamPokemon(slot=1, pokemon="Koraidon"), fingerprint="shared_fp")
+    team_b.format = "champions_test"
+    async with get_connection(db_path) as db:
+        id_a = await write_or_queue_team(db, team_a)
+        id_b = await write_or_queue_team(db, team_b)
+    assert id_a != id_b
