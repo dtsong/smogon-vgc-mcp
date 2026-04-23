@@ -65,6 +65,31 @@ async def test_ingest_champions_sheet_fetch_failure_records_counter(db_path: Pat
     assert report["rejected"] == 0
 
 
+async def test_ingest_champions_sheet_initializes_fresh_db(tmp_path: Path):
+    # No pre-init — exercises the cycle-1 init_database call inside
+    # ingest_champions_sheet so a brand-new install survives the first run.
+    fresh_db = tmp_path / "fresh.db"
+    sheet_csv = "URL\nhttps://pokepast.es/abc\n"
+    pokepaste_text = (
+        "Koraidon @ Life Orb\nAbility: Orichalcum Pulse\nLevel: 50\n"
+        "EVs: 32 Atk\nAdamant Nature\n"
+        "- Flare Blitz\n- Protect\n- Collision Course\n- Dragon Claw"
+    )
+    with (
+        patch(
+            "smogon_vgc_mcp.fetcher.sheets.fetch_text_resilient",
+            new=AsyncMock(return_value=FetchResult.ok(sheet_csv)),
+        ),
+        patch(
+            "smogon_vgc_mcp.fetcher.ingestion.pipeline.fetch_pokepaste",
+            new=AsyncMock(return_value=FetchResult.ok(pokepaste_text)),
+        ),
+    ):
+        report = await ingest_champions_sheet(db_path=fresh_db)
+    assert fresh_db.exists()
+    assert report["auto"] == 1
+
+
 async def test_ingest_champions_sheet_per_row_exception_isolated(db_path: Path):
     sheet_csv = "URL\nhttps://pokepast.es/a\nhttps://pokepast.es/b\n"
     call_count = {"n": 0}

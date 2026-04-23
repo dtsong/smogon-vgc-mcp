@@ -98,8 +98,9 @@ async def test_ingest_pokepaste_review_pending_when_confidence_low(db_path: Path
     assert "tera_type_unknown" in stored.review_reasons
 
 
-async def test_ingest_pokepaste_parse_exception_returns_parse_failed(db_path: Path):
-    # Force parse_pokepaste_to_champions_draft to raise; pipeline should wrap it.
+async def test_ingest_pokepaste_parse_exception_returns_fetch_failed(db_path: Path):
+    # Force parse_pokepaste_to_champions_draft to raise; pipeline wraps it
+    # into a FetchResult.fail(PARSE_ERROR) which surfaces as fetch_failed.
     def boom(*a, **kw):
         raise ValueError("boom")
 
@@ -117,6 +118,29 @@ async def test_ingest_pokepaste_parse_exception_returns_parse_failed(db_path: Pa
     assert result.status == "fetch_failed"
     assert result.reason is not None
     assert "Failed to parse pokepaste" in result.reason
+
+
+async def test_ingest_db_write_failure_returns_fetch_failed(db_path: Path):
+    text = FIXTURE.read_text()
+
+    async def boom(db, team):
+        raise RuntimeError("disk full")
+
+    with (
+        patch(
+            "smogon_vgc_mcp.fetcher.ingestion.pipeline.fetch_pokepaste",
+            new=AsyncMock(return_value=FetchResult.ok(text)),
+        ),
+        patch(
+            "smogon_vgc_mcp.fetcher.ingestion.pipeline.write_or_queue_team",
+            new=boom,
+        ),
+    ):
+        result = await ingest_url("https://pokepast.es/dbfail", db_path=db_path)
+    assert result.status == "fetch_failed"
+    assert result.reason is not None
+    assert "db_write_error" in result.reason
+    assert result.team_row_id is None
 
 
 def test_score_arithmetic_matches_threshold():

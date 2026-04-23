@@ -9,6 +9,7 @@ and wiring a ``_fetch_tierN`` coroutine.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -28,9 +29,14 @@ from smogon_vgc_mcp.fetcher.ingestion.validator import validate
 from smogon_vgc_mcp.fetcher.pokepaste import fetch_pokepaste
 from smogon_vgc_mcp.resilience import ErrorCategory, FetchResult, ServiceError
 
+logger = logging.getLogger(__name__)
+
 AUTO_WRITE_THRESHOLD = 0.85
 
 IngestStatus = Literal["auto", "review_pending", "fetch_failed", "parse_failed", "rejected"]
+# Subset actually persisted to ChampionsTeam.ingestion_status — terminal
+# statuses (fetch_failed, parse_failed, rejected) return before any DB write.
+WrittenIngestionStatus = Literal["auto", "review_pending"]
 
 
 @dataclass(frozen=True)
@@ -44,7 +50,9 @@ class IngestResult:
 async def _fetch_tier1(url: str) -> FetchResult[ChampionsTeamDraft]:
     fetched = await fetch_pokepaste(url)
     if not fetched.success or not fetched.data:
-        return FetchResult.fail(fetched.error) if fetched.error else FetchResult.ok(None)
+        if fetched.error is not None:
+            return FetchResult.fail(fetched.error)
+        return FetchResult.ok(None)
     try:
         draft = parse_pokepaste_to_champions_draft(fetched.data, source_url=url)
     except Exception as exc:
@@ -56,6 +64,7 @@ async def _fetch_tier1(url: str) -> FetchResult[ChampionsTeamDraft]:
             )
         )
     if not draft.pokemon:
+        logger.warning("pokepaste parsed to zero pokemon: url=%s", url)
         return FetchResult.ok(None)
     return FetchResult.ok(draft)
 
@@ -92,7 +101,9 @@ async def ingest_url(url: str, *, db_path: Path | None = None) -> IngestResult:
     else:
         confidence = _score(normalized, len(report.soft_failures))
 
-    status = "auto" if confidence >= AUTO_WRITE_THRESHOLD else "review_pending"
+    status: WrittenIngestionStatus = (
+        "auto" if confidence >= AUTO_WRITE_THRESHOLD else "review_pending"
+    )
 
     team = ChampionsTeam(
         team_id=compute_team_fingerprint(normalized.pokemon),
@@ -109,8 +120,9 @@ async def ingest_url(url: str, *, db_path: Path | None = None) -> IngestResult:
         async with get_connection(db_path) as db:
             row_id = await write_or_queue_team(db, team)
     except Exception as exc:
+        logger.exception("ingest_url: db write failed for url=%s", url)
         return IngestResult(
-            status="parse_failed",
+            status="fetch_failed",
             confidence=confidence,
             reason=f"db_write_error: {exc}",
         )

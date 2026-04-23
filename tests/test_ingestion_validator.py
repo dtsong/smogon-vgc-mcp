@@ -155,6 +155,27 @@ def test_move_illegal_flagged_as_soft():
     assert "move_illegal" in rep.soft_failures
 
 
+def test_multiple_illegal_moves_all_flagged_per_pokemon():
+    # Pre-cycle-2: validator broke after the first illegal move so the second
+    # was never inspected. After fix, the inner loop visits every move; the
+    # outer dedup still collapses repeats from a single Pokemon to one entry,
+    # but removing the break is required so a Pokemon with move1 legal +
+    # move2 illegal is still flagged.
+    rep = validate(
+        _draft(
+            ChampionsTeamPokemon(
+                slot=1,
+                pokemon="Flutter Mane",
+                move1="Moonblast",  # legal
+                move2="Flare Blitz",  # illegal
+                move3="Earthquake",  # also illegal, should still be visited
+            )
+        ),
+        dex_lookup=FAKE_DEX,
+    )
+    assert "move_illegal" in rep.soft_failures
+
+
 def test_legal_ability_and_moves_ok():
     rep = validate(
         _draft(

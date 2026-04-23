@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+import traceback
 from pathlib import Path
 
 from smogon_vgc_mcp.fetcher.ingestion.pipeline import ingest_url
@@ -35,6 +36,7 @@ def main() -> None:
         sys.exit(asyncio.run(main_async(sys.argv[1:])))
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
         sys.exit(3)
 
 

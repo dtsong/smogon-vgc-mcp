@@ -40,3 +40,19 @@ async def test_cli_rejected_exit_nonzero(db_path: Path, capsys):
 async def test_cli_missing_url_exit_usage(db_path: Path, capsys):
     exit_code = await main_async([], db_path=db_path)
     assert exit_code == 1
+
+
+def test_main_unhandled_exception_exits_three(capsys, monkeypatch):
+    from smogon_vgc_mcp.entry import ingest_cli
+
+    async def boom(*a, **kw):
+        raise RuntimeError("kaboom")
+
+    monkeypatch.setattr(ingest_cli, "main_async", boom)
+    monkeypatch.setattr("sys.argv", ["vgc-ingest", "https://pokepast.es/x"])
+    with pytest.raises(SystemExit) as excinfo:
+        ingest_cli.main()
+    assert excinfo.value.code == 3
+    captured = capsys.readouterr()
+    assert "kaboom" in captured.err
+    assert "RuntimeError" in captured.err  # traceback printed
