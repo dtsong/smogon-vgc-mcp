@@ -122,6 +122,16 @@ async def load_dex_lookup(db_path: Path | None = None) -> DexLookup | None:
                 JOIN champions_dex_moves m ON m.id = l.move_id
                 """
             )
+            if not learnset_rows:
+                # Pokemon rows exist but the learnset join is empty —
+                # identity checks will pass while every move will flag
+                # as move_illegal, flooding teams into review_pending.
+                # Surface the condition so operators can spot the broken
+                # dex state without having to diff soft-failure codes.
+                logger.warning(
+                    "load_dex_lookup: champions_dex_learnsets is empty — "
+                    "all move checks will flag as move_illegal"
+                )
     except (aiosqlite.Error, OSError):
         # A missing/corrupt dex should not take down the whole ingest
         # run. Skip the optional checks and let the pipeline proceed on
