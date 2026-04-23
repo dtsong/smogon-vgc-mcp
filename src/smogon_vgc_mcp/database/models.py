@@ -288,3 +288,61 @@ class ChampionsUsageSnapshot:
     elo_cutoff: str
     source: str = "pikalytics"
     fetched_at: str | None = None
+
+
+# =============================================================================
+# Champions team ingestion data models
+# =============================================================================
+
+
+@dataclass
+class ChampionsTeamPokemon:
+    """A Pokemon on a Champions team (Stat Points, not EVs/IVs)."""
+
+    slot: int
+    pokemon: str
+    item: str | None = None
+    ability: str | None = None
+    nature: str | None = None
+    tera_type: str | None = None
+    level: int = 50
+    sp_hp: int = 0
+    sp_atk: int = 0
+    sp_def: int = 0
+    sp_spa: int = 0
+    sp_spd: int = 0
+    sp_spe: int = 0
+    move1: str | None = None
+    move2: str | None = None
+    move3: str | None = None
+    move4: str | None = None
+
+
+@dataclass
+class ChampionsTeam:
+    """A Champions team as stored in champions_teams."""
+
+    team_id: str
+    source_type: str              # 'sheet' | 'pokepaste' | 'x' | 'blog'
+    source_url: str
+    # 'auto' | 'review_pending' | 'labeled' | 'fetch_failed' | 'parse_failed'
+    ingestion_status: str
+    confidence_score: float
+    format: str = "champions_ma"
+    description: str | None = None
+    owner: str | None = None
+    review_reasons: list[str] | None = None
+    normalizations: list[str] | None = None
+    pokemon: list[ChampionsTeamPokemon] = field(default_factory=list)
+
+
+@dataclass
+class ChampionsTeamDraft:
+    """In-flight team from an extractor before validation/write."""
+
+    source_type: str
+    source_url: str
+    tier_baseline_confidence: float
+    description: str | None = None
+    owner: str | None = None
+    pokemon: list[ChampionsTeamPokemon] = field(default_factory=list)
