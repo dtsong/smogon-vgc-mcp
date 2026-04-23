@@ -45,8 +45,41 @@ def _check_team_shape(pokes: list[ChampionsTeamPokemon]) -> list[str]:
     return reasons
 
 
-def validate(draft: ChampionsTeamDraft) -> ValidationReport:
-    """Validate a team draft. Returns a ValidationReport."""
+DexLookup = dict[str, dict[str, list[str]]]  # name_casefold -> {"abilities": [...], "moves": [...]}
+
+
+def _check_pokemon_identity(poke: ChampionsTeamPokemon, dex: DexLookup | None) -> list[str]:
+    if dex is None:
+        return []
+    if poke.pokemon.casefold() not in dex:
+        return ["pokemon_unknown"]
+    return []
+
+
+def _check_ability_and_moves(
+    poke: ChampionsTeamPokemon, dex: DexLookup | None
+) -> list[str]:
+    if dex is None:
+        return []
+    entry = dex.get(poke.pokemon.casefold())
+    if entry is None:
+        return []
+    soft: list[str] = []
+    if poke.ability and poke.ability not in entry["abilities"]:
+        soft.append("ability_illegal")
+    moves = [poke.move1, poke.move2, poke.move3, poke.move4]
+    for move in moves:
+        if move and move not in entry["moves"]:
+            soft.append("move_illegal")
+            break
+    return soft
+
+
+def validate(
+    draft: ChampionsTeamDraft,
+    *,
+    dex_lookup: DexLookup | None = None,
+) -> ValidationReport:
     hard: list[str] = []
     soft: list[str] = []
 
@@ -58,6 +91,12 @@ def validate(draft: ChampionsTeamDraft) -> ValidationReport:
         for code in _check_sp_numeric(poke):
             if code not in hard:
                 hard.append(code)
+        for code in _check_pokemon_identity(poke, dex_lookup):
+            if code not in hard:
+                hard.append(code)
+        for code in _check_ability_and_moves(poke, dex_lookup):
+            if code not in soft:
+                soft.append(code)
 
     return ValidationReport(
         passed=not hard,

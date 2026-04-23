@@ -82,3 +82,58 @@ def test_species_clause_case_insensitive():
         ChampionsTeamPokemon(slot=2, pokemon="flutter mane"),
     ))
     assert "duplicate_species" in rep.hard_failures
+
+
+FAKE_DEX = {
+    "flutter mane": {
+        "abilities": ["Protosynthesis"],
+        "moves": ["Moonblast", "Shadow Ball", "Protect", "Dazzling Gleam", "Icy Wind"],
+    },
+    "koraidon": {
+        "abilities": ["Orichalcum Pulse"],
+        "moves": ["Flare Blitz", "Collision Course", "Protect", "Dragon Claw"],
+    },
+}
+
+
+def test_pokemon_unknown_flagged():
+    rep = validate(
+        _draft(ChampionsTeamPokemon(slot=1, pokemon="Fake Pokemon")),
+        dex_lookup=FAKE_DEX,
+    )
+    assert "pokemon_unknown" in rep.hard_failures
+
+
+def test_ability_illegal_flagged_as_soft():
+    rep = validate(
+        _draft(ChampionsTeamPokemon(
+            slot=1, pokemon="Flutter Mane", ability="Levitate",
+        )),
+        dex_lookup=FAKE_DEX,
+    )
+    assert "ability_illegal" in rep.soft_failures
+    assert rep.passed  # soft failures don't fail the report
+
+
+def test_move_illegal_flagged_as_soft():
+    rep = validate(
+        _draft(ChampionsTeamPokemon(
+            slot=1, pokemon="Flutter Mane",
+            move1="Flare Blitz",  # not in Flutter Mane learnset
+        )),
+        dex_lookup=FAKE_DEX,
+    )
+    assert "move_illegal" in rep.soft_failures
+
+
+def test_legal_ability_and_moves_ok():
+    rep = validate(
+        _draft(ChampionsTeamPokemon(
+            slot=1, pokemon="Flutter Mane",
+            ability="Protosynthesis",
+            move1="Moonblast", move2="Shadow Ball", move3="Protect", move4="Icy Wind",
+        )),
+        dex_lookup=FAKE_DEX,
+    )
+    assert "ability_illegal" not in rep.soft_failures
+    assert "move_illegal" not in rep.soft_failures
