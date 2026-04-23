@@ -345,12 +345,13 @@ async def ingest_champions_sheet(db_path: Path | None = None) -> dict[str, int]:
         try:
             result = await ingest_url(url, db_path=db_path, dex_lookup=dex_lookup, skip_init=True)
             counts[result.status] = counts.get(result.status, 0) + 1
-        except Exception as exc:
-            # Covers normalizer/validator crashes the pipeline didn't
-            # already catch (DB-write failures are caught in ingest_url
-            # and returned as status=db_error). Bucket separately from
-            # fetch_failed so operators can distinguish network issues
-            # from code bugs.
+        except (aiosqlite.Error, OSError, RuntimeError) as exc:
+            # Narrow catch: genuine DB/disk/runtime failures on a single
+            # row shouldn't abort the whole sheet. Programmer bugs
+            # (TypeError, AttributeError, KeyError, etc.) are NOT caught
+            # here — they surface as real crashes so regressions in the
+            # normalizer/validator/parser are immediately visible rather
+            # than silently inflating an ``unexpected_error`` counter.
             logger.exception(
                 "ingest_champions_sheet: unhandled %s for url=%s",
                 type(exc).__name__,

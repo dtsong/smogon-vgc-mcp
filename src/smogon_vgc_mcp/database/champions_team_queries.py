@@ -57,123 +57,132 @@ async def write_or_queue_team(db: aiosqlite.Connection, team: ChampionsTeam) -> 
     prior row first.
 
     Commits internally; the caller should not wrap this in its own
-    transaction expecting to rollback. Permanently mutates
-    ``db.row_factory`` on the caller's connection to ``aiosqlite.Row``;
-    any subsequent query on the same connection will receive ``Row``
-    objects instead of plain tuples.
+    transaction expecting to rollback. ``db.row_factory`` is temporarily
+    switched to ``aiosqlite.Row`` for the dedup lookup and restored
+    before return, so the caller's connection state is preserved for
+    any subsequent queries that expect tuples.
     """
+    prior_factory = db.row_factory
     db.row_factory = aiosqlite.Row
+    try:
+        existing = await db.execute_fetchall(
+            "SELECT id FROM champions_teams WHERE format = ? AND team_id = ?",
+            (team.format, team.team_id),
+        )
+        if existing:
+            return int(existing[0]["id"])
 
-    existing = await db.execute_fetchall(
-        "SELECT id FROM champions_teams WHERE format = ? AND team_id = ?",
-        (team.format, team.team_id),
-    )
-    if existing:
-        return int(existing[0]["id"])
-
-    cursor = await db.execute(
-        """
-        INSERT INTO champions_teams(
-            format, team_id, description, owner, source_type, source_url,
-            ingestion_status, confidence_score, review_reasons, normalizations
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            team.format,
-            team.team_id,
-            team.description,
-            team.owner,
-            team.source_type,
-            team.source_url,
-            team.ingestion_status,
-            team.confidence_score,
-            json.dumps(team.review_reasons) if team.review_reasons else None,
-            json.dumps(team.normalizations) if team.normalizations else None,
-        ),
-    )
-    team_row_id = cursor.lastrowid
-    if team_row_id is None:
-        raise RuntimeError("INSERT into champions_teams returned no lastrowid")
-
-    for poke in team.pokemon:
-        await db.execute(
+        cursor = await db.execute(
             """
-            INSERT INTO champions_team_pokemon(
-                team_id, slot, pokemon, item, ability, nature, tera_type, level,
-                sp_hp, sp_atk, sp_def, sp_spa, sp_spd, sp_spe,
-                move1, move2, move3, move4
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO champions_teams(
+                format, team_id, description, owner, source_type, source_url,
+                ingestion_status, confidence_score, review_reasons, normalizations
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                team_row_id,
-                poke.slot,
-                poke.pokemon,
-                poke.item,
-                poke.ability,
-                poke.nature,
-                poke.tera_type,
-                poke.level,
-                poke.sp_hp,
-                poke.sp_atk,
-                poke.sp_def,
-                poke.sp_spa,
-                poke.sp_spd,
-                poke.sp_spe,
-                poke.move1,
-                poke.move2,
-                poke.move3,
-                poke.move4,
+                team.format,
+                team.team_id,
+                team.description,
+                team.owner,
+                team.source_type,
+                team.source_url,
+                team.ingestion_status,
+                team.confidence_score,
+                json.dumps(team.review_reasons) if team.review_reasons else None,
+                json.dumps(team.normalizations) if team.normalizations else None,
             ),
         )
+        team_row_id = cursor.lastrowid
+        if team_row_id is None:
+            raise RuntimeError("INSERT into champions_teams returned no lastrowid")
 
-    await db.commit()
-    return int(team_row_id)
+        for poke in team.pokemon:
+            await db.execute(
+                """
+                INSERT INTO champions_team_pokemon(
+                    team_id, slot, pokemon, item, ability, nature, tera_type, level,
+                    sp_hp, sp_atk, sp_def, sp_spa, sp_spd, sp_spe,
+                    move1, move2, move3, move4
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    team_row_id,
+                    poke.slot,
+                    poke.pokemon,
+                    poke.item,
+                    poke.ability,
+                    poke.nature,
+                    poke.tera_type,
+                    poke.level,
+                    poke.sp_hp,
+                    poke.sp_atk,
+                    poke.sp_def,
+                    poke.sp_spa,
+                    poke.sp_spd,
+                    poke.sp_spe,
+                    poke.move1,
+                    poke.move2,
+                    poke.move3,
+                    poke.move4,
+                ),
+            )
+
+        await db.commit()
+        return int(team_row_id)
+    finally:
+        db.row_factory = prior_factory
 
 
 async def get_champions_team(db: aiosqlite.Connection, row_id: int) -> ChampionsTeam | None:
+    prior_factory = db.row_factory
     db.row_factory = aiosqlite.Row
-    team_row = await db.execute_fetchall("SELECT * FROM champions_teams WHERE id = ?", (row_id,))
-    if not team_row:
-        return None
-    t = team_row[0]
-
-    poke_rows = await db.execute_fetchall(
-        "SELECT * FROM champions_team_pokemon WHERE team_id = ? ORDER BY slot",
-        (row_id,),
-    )
-    pokemon = [
-        ChampionsTeamPokemon(
-            slot=p["slot"],
-            pokemon=p["pokemon"],
-            item=p["item"],
-            ability=p["ability"],
-            nature=p["nature"],
-            tera_type=p["tera_type"],
-            level=p["level"],
-            sp_hp=p["sp_hp"],
-            sp_atk=p["sp_atk"],
-            sp_def=p["sp_def"],
-            sp_spa=p["sp_spa"],
-            sp_spd=p["sp_spd"],
-            sp_spe=p["sp_spe"],
-            move1=p["move1"],
-            move2=p["move2"],
-            move3=p["move3"],
-            move4=p["move4"],
+    try:
+        team_row = await db.execute_fetchall(
+            "SELECT * FROM champions_teams WHERE id = ?", (row_id,)
         )
-        for p in poke_rows
-    ]
+        if not team_row:
+            return None
+        t = team_row[0]
 
-    return ChampionsTeam(
-        team_id=t["team_id"],
-        format=t["format"],
-        description=t["description"],
-        owner=t["owner"],
-        source_type=t["source_type"],
-        source_url=t["source_url"],
-        ingestion_status=t["ingestion_status"],
-        confidence_score=t["confidence_score"],
-        review_reasons=json.loads(t["review_reasons"]) if t["review_reasons"] else None,
-        normalizations=json.loads(t["normalizations"]) if t["normalizations"] else None,
-        pokemon=pokemon,
-    )
+        poke_rows = await db.execute_fetchall(
+            "SELECT * FROM champions_team_pokemon WHERE team_id = ? ORDER BY slot",
+            (row_id,),
+        )
+        pokemon = [
+            ChampionsTeamPokemon(
+                slot=p["slot"],
+                pokemon=p["pokemon"],
+                item=p["item"],
+                ability=p["ability"],
+                nature=p["nature"],
+                tera_type=p["tera_type"],
+                level=p["level"],
+                sp_hp=p["sp_hp"],
+                sp_atk=p["sp_atk"],
+                sp_def=p["sp_def"],
+                sp_spa=p["sp_spa"],
+                sp_spd=p["sp_spd"],
+                sp_spe=p["sp_spe"],
+                move1=p["move1"],
+                move2=p["move2"],
+                move3=p["move3"],
+                move4=p["move4"],
+            )
+            for p in poke_rows
+        ]
+
+        return ChampionsTeam(
+            team_id=t["team_id"],
+            format=t["format"],
+            description=t["description"],
+            owner=t["owner"],
+            source_type=t["source_type"],
+            source_url=t["source_url"],
+            ingestion_status=t["ingestion_status"],
+            confidence_score=t["confidence_score"],
+            review_reasons=json.loads(t["review_reasons"]) if t["review_reasons"] else None,
+            normalizations=json.loads(t["normalizations"]) if t["normalizations"] else None,
+            pokemon=pokemon,
+        )
+    finally:
+        db.row_factory = prior_factory

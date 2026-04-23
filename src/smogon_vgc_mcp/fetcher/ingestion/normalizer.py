@@ -45,12 +45,20 @@ def _levenshtein(a: str, b: str) -> int:
 
 
 def _closest_move(name: str, known: set[str]) -> str | None:
-    """Return the closest known move within distance 2, else None."""
+    """Return the closest known move within distance 2, else None.
+
+    Ties at the same distance are broken by choosing the
+    lexicographically smallest name, so the result is deterministic
+    regardless of ``known`` iteration order.
+    """
     best: tuple[int, str] | None = None
     for known_name in known:
         d = _levenshtein(name.casefold(), known_name.casefold())
-        if d <= 2 and (best is None or d < best[0]):
-            best = (d, known_name)
+        if d > 2:
+            continue
+        candidate = (d, known_name)
+        if best is None or candidate < best:
+            best = candidate
     return best[1] if best else None
 
 

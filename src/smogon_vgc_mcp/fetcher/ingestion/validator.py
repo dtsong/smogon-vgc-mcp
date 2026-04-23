@@ -115,12 +115,18 @@ def _check_ability_and_moves(poke: ChampionsTeamPokemon, dex: DexLookup | None) 
     entry = dex.get(poke.pokemon.casefold())
     if entry is None:
         return []
+    # Case-fold both sides of the membership check. The dex stores names in
+    # their DB casing (e.g. "Protect", "Intimidate") while parsed pokepaste
+    # values vary (e.g. "protect", "PROTECT"). A case-sensitive compare
+    # would spuriously flag ability_illegal / move_illegal on every team.
+    abilities_cf = {a.casefold() for a in entry["abilities"]}
+    moves_cf = {m.casefold() for m in entry["moves"]}
     soft: list[str] = []
-    if poke.ability and poke.ability not in entry["abilities"]:
+    if poke.ability and poke.ability.casefold() not in abilities_cf:
         soft.append("ability_illegal")
     moves = [poke.move1, poke.move2, poke.move3, poke.move4]
     for move in moves:
-        if move and move not in entry["moves"]:
+        if move and move.casefold() not in moves_cf:
             soft.append("move_illegal")
     return soft
 
