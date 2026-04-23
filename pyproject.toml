@@ -29,6 +29,7 @@ labeler = [
 [project.scripts]
 smogon-vgc-mcp = "smogon_vgc_mcp.entry.stdio:main"
 vgc-build = "vgc_agent.cli:main"
+vgc-ingest = "smogon_vgc_mcp.entry.ingest_cli:main"
 vgc-label = "smogon_vgc_mcp.labeler.cli:main"
 
 [dependency-groups]
