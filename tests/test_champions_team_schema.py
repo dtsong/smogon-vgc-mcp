@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+
 from smogon_vgc_mcp.database.schema import get_connection, init_database
 
 
@@ -16,9 +17,18 @@ async def test_champions_teams_table_created(db):
     async with db.execute("PRAGMA table_info(champions_teams)") as cur:
         cols = {row[1] for row in await cur.fetchall()}
     assert {
-        "id", "format", "team_id", "description", "owner",
-        "source_type", "source_url", "ingestion_status",
-        "confidence_score", "review_reasons", "normalizations", "ingested_at",
+        "id",
+        "format",
+        "team_id",
+        "description",
+        "owner",
+        "source_type",
+        "source_url",
+        "ingestion_status",
+        "confidence_score",
+        "review_reasons",
+        "normalizations",
+        "ingested_at",
     } <= cols
 
 
@@ -26,10 +36,25 @@ async def test_champions_team_pokemon_table_created(db):
     async with db.execute("PRAGMA table_info(champions_team_pokemon)") as cur:
         cols = {row[1] for row in await cur.fetchall()}
     assert {
-        "id", "team_id", "slot", "pokemon", "item", "ability", "nature",
-        "tera_type", "level",
-        "sp_hp", "sp_atk", "sp_def", "sp_spa", "sp_spd", "sp_spe",
-        "move1", "move2", "move3", "move4",
+        "id",
+        "team_id",
+        "slot",
+        "pokemon",
+        "item",
+        "ability",
+        "nature",
+        "tera_type",
+        "level",
+        "sp_hp",
+        "sp_atk",
+        "sp_def",
+        "sp_spa",
+        "sp_spd",
+        "sp_spe",
+        "move1",
+        "move2",
+        "move3",
+        "move4",
     } <= cols
 
 

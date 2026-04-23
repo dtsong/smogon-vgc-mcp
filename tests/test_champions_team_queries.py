@@ -1,7 +1,7 @@
-import json
 from pathlib import Path
 
 import pytest
+
 from smogon_vgc_mcp.database.champions_team_queries import (
     compute_team_fingerprint,
     get_champions_team,
@@ -95,10 +95,12 @@ def test_fingerprint_stable_for_same_team():
 
 
 def test_fingerprint_move_order_insensitive():
-    team_a = _team(ChampionsTeamPokemon(
-        slot=1, pokemon="X", move1="A", move2="B", move3="C", move4="D"))
-    team_b = _team(ChampionsTeamPokemon(
-        slot=1, pokemon="X", move1="D", move2="C", move3="B", move4="A"))
+    team_a = _team(
+        ChampionsTeamPokemon(slot=1, pokemon="X", move1="A", move2="B", move3="C", move4="D")
+    )
+    team_b = _team(
+        ChampionsTeamPokemon(slot=1, pokemon="X", move1="D", move2="C", move3="B", move4="A")
+    )
     assert compute_team_fingerprint(team_a.pokemon) == compute_team_fingerprint(team_b.pokemon)
 
 

@@ -102,7 +102,5 @@ def normalize(
 ) -> tuple[ChampionsTeamDraft, list[str]]:
     """Return a normalized copy of the draft plus a list of change entries."""
     log: list[str] = []
-    new_pokes = [
-        _normalize_pokemon(p, known_moves=known_moves, log=log) for p in draft.pokemon
-    ]
+    new_pokes = [_normalize_pokemon(p, known_moves=known_moves, log=log) for p in draft.pokemon]
     return replace(draft, pokemon=new_pokes), log

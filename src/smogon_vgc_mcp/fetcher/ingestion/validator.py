@@ -45,19 +45,58 @@ def _check_team_shape(pokes: list[ChampionsTeamPokemon]) -> list[str]:
     return reasons
 
 
-NATURES = frozenset({
-    "Hardy", "Lonely", "Brave", "Adamant", "Naughty",
-    "Bold", "Docile", "Relaxed", "Impish", "Lax",
-    "Timid", "Hasty", "Serious", "Jolly", "Naive",
-    "Modest", "Mild", "Quiet", "Bashful", "Rash",
-    "Calm", "Gentle", "Sassy", "Careful", "Quirky",
-})
+NATURES = frozenset(
+    {
+        "Hardy",
+        "Lonely",
+        "Brave",
+        "Adamant",
+        "Naughty",
+        "Bold",
+        "Docile",
+        "Relaxed",
+        "Impish",
+        "Lax",
+        "Timid",
+        "Hasty",
+        "Serious",
+        "Jolly",
+        "Naive",
+        "Modest",
+        "Mild",
+        "Quiet",
+        "Bashful",
+        "Rash",
+        "Calm",
+        "Gentle",
+        "Sassy",
+        "Careful",
+        "Quirky",
+    }
+)
 
-TYPES = frozenset({
-    "Normal", "Fire", "Water", "Electric", "Grass", "Ice",
-    "Fighting", "Poison", "Ground", "Flying", "Psychic", "Bug",
-    "Rock", "Ghost", "Dragon", "Dark", "Steel", "Fairy",
-})
+TYPES = frozenset(
+    {
+        "Normal",
+        "Fire",
+        "Water",
+        "Electric",
+        "Grass",
+        "Ice",
+        "Fighting",
+        "Poison",
+        "Ground",
+        "Flying",
+        "Psychic",
+        "Bug",
+        "Rock",
+        "Ghost",
+        "Dragon",
+        "Dark",
+        "Steel",
+        "Fairy",
+    }
+)
 
 DexLookup = dict[str, dict[str, list[str]]]  # name_casefold -> {"abilities": [...], "moves": [...]}
 
@@ -70,9 +109,7 @@ def _check_pokemon_identity(poke: ChampionsTeamPokemon, dex: DexLookup | None) -
     return []
 
 
-def _check_ability_and_moves(
-    poke: ChampionsTeamPokemon, dex: DexLookup | None
-) -> list[str]:
+def _check_ability_and_moves(poke: ChampionsTeamPokemon, dex: DexLookup | None) -> list[str]:
     if dex is None:
         return []
     entry = dex.get(poke.pokemon.casefold())

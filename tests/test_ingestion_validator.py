@@ -24,9 +24,17 @@ def test_sp_over_per_stat_flagged():
 
 
 def test_sp_over_total_flagged():
-    rep = validate(_draft(ChampionsTeamPokemon(
-        slot=1, pokemon="X", sp_hp=32, sp_atk=32, sp_def=10,
-    )))
+    rep = validate(
+        _draft(
+            ChampionsTeamPokemon(
+                slot=1,
+                pokemon="X",
+                sp_hp=32,
+                sp_atk=32,
+                sp_def=10,
+            )
+        )
+    )
     assert not rep.passed
     assert "sp_over_total" in rep.hard_failures
 
@@ -44,10 +52,20 @@ def test_boundary_32_ok():
 
 def test_boundary_66_total_ok():
     # 11 each across 6 stats = 66
-    rep = validate(_draft(ChampionsTeamPokemon(
-        slot=1, pokemon="X",
-        sp_hp=11, sp_atk=11, sp_def=11, sp_spa=11, sp_spd=11, sp_spe=11,
-    )))
+    rep = validate(
+        _draft(
+            ChampionsTeamPokemon(
+                slot=1,
+                pokemon="X",
+                sp_hp=11,
+                sp_atk=11,
+                sp_def=11,
+                sp_spa=11,
+                sp_spd=11,
+                sp_spe=11,
+            )
+        )
+    )
     assert "sp_over_total" not in rep.hard_failures
 
 
@@ -69,18 +87,22 @@ def test_six_slots_ok():
 
 
 def test_duplicate_species_flagged():
-    rep = validate(_draft(
-        ChampionsTeamPokemon(slot=1, pokemon="Flutter Mane"),
-        ChampionsTeamPokemon(slot=2, pokemon="Flutter Mane"),
-    ))
+    rep = validate(
+        _draft(
+            ChampionsTeamPokemon(slot=1, pokemon="Flutter Mane"),
+            ChampionsTeamPokemon(slot=2, pokemon="Flutter Mane"),
+        )
+    )
     assert "duplicate_species" in rep.hard_failures
 
 
 def test_species_clause_case_insensitive():
-    rep = validate(_draft(
-        ChampionsTeamPokemon(slot=1, pokemon="Flutter Mane"),
-        ChampionsTeamPokemon(slot=2, pokemon="flutter mane"),
-    ))
+    rep = validate(
+        _draft(
+            ChampionsTeamPokemon(slot=1, pokemon="Flutter Mane"),
+            ChampionsTeamPokemon(slot=2, pokemon="flutter mane"),
+        )
+    )
     assert "duplicate_species" in rep.hard_failures
 
 
@@ -106,9 +128,13 @@ def test_pokemon_unknown_flagged():
 
 def test_ability_illegal_flagged_as_soft():
     rep = validate(
-        _draft(ChampionsTeamPokemon(
-            slot=1, pokemon="Flutter Mane", ability="Levitate",
-        )),
+        _draft(
+            ChampionsTeamPokemon(
+                slot=1,
+                pokemon="Flutter Mane",
+                ability="Levitate",
+            )
+        ),
         dex_lookup=FAKE_DEX,
     )
     assert "ability_illegal" in rep.soft_failures
@@ -117,10 +143,13 @@ def test_ability_illegal_flagged_as_soft():
 
 def test_move_illegal_flagged_as_soft():
     rep = validate(
-        _draft(ChampionsTeamPokemon(
-            slot=1, pokemon="Flutter Mane",
-            move1="Flare Blitz",  # not in Flutter Mane learnset
-        )),
+        _draft(
+            ChampionsTeamPokemon(
+                slot=1,
+                pokemon="Flutter Mane",
+                move1="Flare Blitz",  # not in Flutter Mane learnset
+            )
+        ),
         dex_lookup=FAKE_DEX,
     )
     assert "move_illegal" in rep.soft_failures
@@ -128,11 +157,17 @@ def test_move_illegal_flagged_as_soft():
 
 def test_legal_ability_and_moves_ok():
     rep = validate(
-        _draft(ChampionsTeamPokemon(
-            slot=1, pokemon="Flutter Mane",
-            ability="Protosynthesis",
-            move1="Moonblast", move2="Shadow Ball", move3="Protect", move4="Icy Wind",
-        )),
+        _draft(
+            ChampionsTeamPokemon(
+                slot=1,
+                pokemon="Flutter Mane",
+                ability="Protosynthesis",
+                move1="Moonblast",
+                move2="Shadow Ball",
+                move3="Protect",
+                move4="Icy Wind",
+            )
+        ),
         dex_lookup=FAKE_DEX,
     )
     assert "ability_illegal" not in rep.soft_failures
@@ -140,30 +175,38 @@ def test_legal_ability_and_moves_ok():
 
 
 def test_nature_unknown_soft():
-    rep = validate(_draft(
-        ChampionsTeamPokemon(slot=1, pokemon="X", nature="Weird"),
-    ))
+    rep = validate(
+        _draft(
+            ChampionsTeamPokemon(slot=1, pokemon="X", nature="Weird"),
+        )
+    )
     assert "nature_unknown" in rep.soft_failures
 
 
 def test_nature_known_ok():
-    rep = validate(_draft(
-        ChampionsTeamPokemon(slot=1, pokemon="X", nature="Timid"),
-    ))
+    rep = validate(
+        _draft(
+            ChampionsTeamPokemon(slot=1, pokemon="X", nature="Timid"),
+        )
+    )
     assert "nature_unknown" not in rep.soft_failures
 
 
 def test_tera_type_unknown_soft():
-    rep = validate(_draft(
-        ChampionsTeamPokemon(slot=1, pokemon="X", tera_type="Banana"),
-    ))
+    rep = validate(
+        _draft(
+            ChampionsTeamPokemon(slot=1, pokemon="X", tera_type="Banana"),
+        )
+    )
     assert "tera_type_unknown" in rep.soft_failures
 
 
 def test_tera_type_none_ok():
-    rep = validate(_draft(
-        ChampionsTeamPokemon(slot=1, pokemon="X", tera_type=None),
-    ))
+    rep = validate(
+        _draft(
+            ChampionsTeamPokemon(slot=1, pokemon="X", tera_type=None),
+        )
+    )
     assert "tera_type_unknown" not in rep.soft_failures
 
 
@@ -174,8 +217,16 @@ def test_move_count_zero_soft():
 
 
 def test_move_count_four_ok():
-    rep = validate(_draft(ChampionsTeamPokemon(
-        slot=1, pokemon="X",
-        move1="a", move2="b", move3="c", move4="d",
-    )))
+    rep = validate(
+        _draft(
+            ChampionsTeamPokemon(
+                slot=1,
+                pokemon="X",
+                move1="a",
+                move2="b",
+                move3="c",
+                move4="d",
+            )
+        )
+    )
     assert "move_count" not in rep.soft_failures
