@@ -35,10 +35,24 @@ def _check_sp_numeric(poke: ChampionsTeamPokemon) -> list[str]:
     return reasons
 
 
+def _check_team_shape(pokes: list[ChampionsTeamPokemon]) -> list[str]:
+    reasons: list[str] = []
+    if not (1 <= len(pokes) <= 6):
+        reasons.append("slot_count")
+    names_cf = [p.pokemon.casefold() for p in pokes]
+    if len(set(names_cf)) != len(names_cf):
+        reasons.append("duplicate_species")
+    return reasons
+
+
 def validate(draft: ChampionsTeamDraft) -> ValidationReport:
     """Validate a team draft. Returns a ValidationReport."""
     hard: list[str] = []
     soft: list[str] = []
+
+    for code in _check_team_shape(draft.pokemon):
+        if code not in hard:
+            hard.append(code)
 
     for poke in draft.pokemon:
         for code in _check_sp_numeric(poke):

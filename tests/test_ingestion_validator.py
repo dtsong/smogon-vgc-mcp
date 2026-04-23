@@ -49,3 +49,36 @@ def test_boundary_66_total_ok():
         sp_hp=11, sp_atk=11, sp_def=11, sp_spa=11, sp_spd=11, sp_spe=11,
     )))
     assert "sp_over_total" not in rep.hard_failures
+
+
+def test_empty_team_flagged():
+    rep = validate(_draft())
+    assert "slot_count" in rep.hard_failures
+
+
+def test_seven_slots_flagged():
+    pokes = [ChampionsTeamPokemon(slot=i, pokemon=f"P{i}") for i in range(1, 8)]
+    rep = validate(_draft(*pokes))
+    assert "slot_count" in rep.hard_failures
+
+
+def test_six_slots_ok():
+    pokes = [ChampionsTeamPokemon(slot=i, pokemon=f"P{i}") for i in range(1, 7)]
+    rep = validate(_draft(*pokes))
+    assert "slot_count" not in rep.hard_failures
+
+
+def test_duplicate_species_flagged():
+    rep = validate(_draft(
+        ChampionsTeamPokemon(slot=1, pokemon="Flutter Mane"),
+        ChampionsTeamPokemon(slot=2, pokemon="Flutter Mane"),
+    ))
+    assert "duplicate_species" in rep.hard_failures
+
+
+def test_species_clause_case_insensitive():
+    rep = validate(_draft(
+        ChampionsTeamPokemon(slot=1, pokemon="Flutter Mane"),
+        ChampionsTeamPokemon(slot=2, pokemon="flutter mane"),
+    ))
+    assert "duplicate_species" in rep.hard_failures
