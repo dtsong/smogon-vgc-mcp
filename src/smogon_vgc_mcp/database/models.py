@@ -4,9 +4,10 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 ChampionsSourceType = Literal["sheet", "pokepaste", "x", "blog"]
-ChampionsIngestionStatus = Literal[
-    "auto", "review_pending", "labeled", "fetch_failed", "parse_failed"
-]
+# Only statuses actually persisted to champions_teams.ingestion_status.
+# Transient pipeline outcomes (fetch_failed / parse_failed / db_error /
+# rejected) are represented on IngestResult, not on ChampionsTeam.
+ChampionsIngestionStatus = Literal["auto", "review_pending", "labeled"]
 
 
 @dataclass

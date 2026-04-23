@@ -90,6 +90,24 @@ async def test_ingest_champions_sheet_initializes_fresh_db(tmp_path: Path):
     assert report["auto"] == 1
 
 
+async def test_ingest_champions_sheet_returns_empty_when_no_sheet_gid(db_path: Path):
+    # Guard against config drift: if champions_ma ever loses its
+    # sheet_gid, ingest_champions_sheet must return a fully-formed
+    # counter dict (not raise, not return a partial dict) so callers
+    # can still parse the result.
+    with patch(
+        "smogon_vgc_mcp.fetcher.sheets.get_sheet_csv_url",
+        return_value=None,
+    ):
+        report = await ingest_champions_sheet(db_path=db_path)
+    assert report["auto"] == 0
+    assert report["review_pending"] == 0
+    assert report["rejected"] == 0
+    assert report["fetch_failed"] == 0
+    assert report["parse_failed"] == 0
+    assert report["db_error"] == 0
+
+
 async def test_ingest_champions_sheet_per_row_exception_isolated(db_path: Path):
     sheet_csv = "URL\nhttps://pokepast.es/a\nhttps://pokepast.es/b\n"
     call_count = {"n": 0}

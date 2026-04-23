@@ -110,6 +110,14 @@ def test_fingerprint_different_when_sets_differ():
     assert compute_team_fingerprint(team_a.pokemon) != compute_team_fingerprint(team_b.pokemon)
 
 
+def test_fingerprint_slot_order_sensitive():
+    # Same species in different slots must produce different fingerprints —
+    # reassignment is a team-level change, not a reorder.
+    team_a = _team(ChampionsTeamPokemon(slot=1, pokemon="Koraidon"))
+    team_b = _team(ChampionsTeamPokemon(slot=2, pokemon="Koraidon"))
+    assert compute_team_fingerprint(team_a.pokemon) != compute_team_fingerprint(team_b.pokemon)
+
+
 async def test_get_champions_team_returns_none_when_missing(db_path: Path):
     async with get_connection(db_path) as db:
         out = await get_champions_team(db, row_id=99999)

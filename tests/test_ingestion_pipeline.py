@@ -101,9 +101,10 @@ async def test_ingest_pokepaste_review_pending_when_confidence_low(db_path: Path
     assert "tera_type_unknown" in stored.review_reasons
 
 
-async def test_ingest_pokepaste_parse_exception_returns_fetch_failed(db_path: Path):
-    # Force parse_pokepaste_to_champions_draft to raise; pipeline wraps it
-    # into a FetchResult.fail(PARSE_ERROR) which surfaces as fetch_failed.
+async def test_ingest_pokepaste_parse_exception_returns_parse_failed(db_path: Path):
+    # Force parse_pokepaste_to_champions_draft to raise; pipeline wraps
+    # it into a FetchResult.fail(PARSE_ERROR) which must surface as
+    # parse_failed (CLI exit 4), not fetch_failed (CLI exit 3).
     def boom(*a, **kw):
         raise ValueError("boom")
 
@@ -118,9 +119,22 @@ async def test_ingest_pokepaste_parse_exception_returns_fetch_failed(db_path: Pa
         ),
     ):
         result = await ingest_url("https://pokepast.es/exc", db_path=db_path)
-    assert result.status == "fetch_failed"
+    assert result.status == "parse_failed"
     assert result.reason is not None
     assert "Failed to parse pokepaste" in result.reason
+
+
+async def test_ingest_whitespace_body_returns_parse_failed(db_path: Path):
+    # Whitespace-only body parses to zero pokemon; the zero-pokemon
+    # branch in _fetch_tier1 returns FetchResult.ok(None), which the
+    # caller maps to parse_failed with reason="empty_parse".
+    with patch(
+        "smogon_vgc_mcp.fetcher.ingestion.pipeline.fetch_pokepaste",
+        new=AsyncMock(return_value=FetchResult.ok("   \n\n   ")),
+    ):
+        result = await ingest_url("https://pokepast.es/ws", db_path=db_path)
+    assert result.status == "parse_failed"
+    assert result.reason == "empty_parse"
 
 
 async def test_ingest_db_write_failure_returns_db_error(db_path: Path):

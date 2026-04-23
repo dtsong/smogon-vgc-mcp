@@ -10,7 +10,7 @@ from pathlib import Path
 import aiosqlite
 
 from smogon_vgc_mcp.database.schema import get_connection, get_db_path, init_database
-from smogon_vgc_mcp.fetcher.ingestion.pipeline import ingest_url
+from smogon_vgc_mcp.fetcher.ingestion.pipeline import ingest_url, load_dex_lookup
 from smogon_vgc_mcp.fetcher.pokepaste import fetch_pokepaste, parse_pokepaste
 from smogon_vgc_mcp.formats import DEFAULT_FORMAT, get_format, get_sheet_csv_url
 from smogon_vgc_mcp.resilience import (
@@ -306,8 +306,6 @@ async def ingest_champions_sheet(db_path: Path | None = None) -> dict[str, int]:
 
     Returns a counter dict of status -> count.
     """
-    from smogon_vgc_mcp.fetcher.ingestion.pipeline import load_dex_lookup
-
     await init_database(db_path)
     sheet_url = get_sheet_csv_url("champions_ma")
     if not sheet_url:

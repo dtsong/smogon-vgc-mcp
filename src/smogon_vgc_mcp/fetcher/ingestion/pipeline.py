@@ -88,31 +88,39 @@ def _score(draft: ChampionsTeamDraft, soft_count: int) -> float:
 async def load_dex_lookup(db_path: Path | None = None) -> DexLookup | None:
     """Build a dex lookup keyed on casefolded Pokemon name.
 
-    Returns None if the ``champions_dex_pokemon`` table has no rows —
-    callers should treat that as "dex not loaded" and skip identity/
-    legality checks. Logs once at warning level when empty so the
+    Returns None if the ``champions_dex_pokemon`` table has no rows or
+    if the query fails for any reason — callers should treat that as
+    "dex not loaded" and skip identity/legality checks. Logs once at
+    warning level when empty and at error level on DB failure, so the
     silent-skip condition is visible in production.
     """
-    async with get_connection(db_path) as db:
-        db.row_factory = aiosqlite.Row
-        pokemon_rows = await db.execute_fetchall(
-            "SELECT name, ability1, ability2, ability_hidden FROM champions_dex_pokemon"
-        )
-        if not pokemon_rows:
-            logger.warning(
-                "load_dex_lookup: champions_dex_pokemon is empty — "
-                "identity/legality checks will be skipped"
+    try:
+        async with get_connection(db_path) as db:
+            db.row_factory = aiosqlite.Row
+            pokemon_rows = await db.execute_fetchall(
+                "SELECT name, ability1, ability2, ability_hidden FROM champions_dex_pokemon"
             )
-            return None
+            if not pokemon_rows:
+                logger.warning(
+                    "load_dex_lookup: champions_dex_pokemon is empty — "
+                    "identity/legality checks will be skipped"
+                )
+                return None
 
-        learnset_rows = await db.execute_fetchall(
-            """
-            SELECT p.name AS pokemon_name, m.name AS move_name
-            FROM champions_dex_learnsets l
-            JOIN champions_dex_pokemon p ON p.id = l.pokemon_id
-            JOIN champions_dex_moves m ON m.id = l.move_id
-            """
-        )
+            learnset_rows = await db.execute_fetchall(
+                """
+                SELECT p.name AS pokemon_name, m.name AS move_name
+                FROM champions_dex_learnsets l
+                JOIN champions_dex_pokemon p ON p.id = l.pokemon_id
+                JOIN champions_dex_moves m ON m.id = l.move_id
+                """
+            )
+    except Exception:
+        # A missing/corrupt dex should not take down the whole ingest
+        # run. Skip the optional checks and let the pipeline proceed on
+        # SP/shape/vocab validation alone.
+        logger.exception("load_dex_lookup: failed to load champions dex; skipping identity checks")
+        return None
 
     lookup: DexLookup = {}
     for row in pokemon_rows:
@@ -133,9 +141,6 @@ async def ingest_url(
     dex_lookup: DexLookup | None = None,
 ) -> IngestResult:
     await init_database(db_path)
-    if dex_lookup is None:
-        dex_lookup = await load_dex_lookup(db_path)
-
     tier = classify_url(url)
 
     if tier == Tier.UNKNOWN:
@@ -151,10 +156,21 @@ async def ingest_url(
     if not fetched.success:
         # ServiceError.message is the actionable text; its dataclass repr
         # buries the message behind category/service/is_recoverable noise.
-        reason = fetched.error.message if fetched.error is not None else "unknown_error"
+        err = fetched.error
+        reason = err.message if err is not None else "unknown_error"
+        # A wrapped parse exception from _fetch_tier1 must surface as
+        # parse_failed, not fetch_failed — the two map to different CLI
+        # exit codes (4 vs 3) and different operator retry strategies.
+        if err is not None and err.category == ErrorCategory.PARSE_ERROR:
+            return IngestResult(status="parse_failed", reason=reason)
         return IngestResult(status="fetch_failed", reason=reason)
     if fetched.data is None:
         return IngestResult(status="parse_failed", reason="empty_parse")
+
+    # Load the dex now that we know the URL will actually be processed,
+    # so rejected/fetch-failed URLs don't pay the round-trip cost.
+    if dex_lookup is None:
+        dex_lookup = await load_dex_lookup(db_path)
 
     draft = fetched.data
     normalized, norm_log = normalize(draft)

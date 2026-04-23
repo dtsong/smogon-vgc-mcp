@@ -27,6 +27,7 @@ def compute_team_fingerprint(pokemon: list[ChampionsTeamPokemon]) -> str:
         moves = tuple(sorted(m for m in (p.move1, p.move2, p.move3, p.move4) if m))
         canonical.append(
             (
+                p.slot,
                 p.pokemon.casefold(),
                 (p.ability or "").casefold(),
                 (p.item or "").casefold(),

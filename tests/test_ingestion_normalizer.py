@@ -85,3 +85,13 @@ def test_pokemon_alias_no_op_when_already_canonical():
     normed, log = normalize(d)
     assert normed.pokemon[0].pokemon == "Urshifu-Single-Strike"
     assert not any("pokemon_alias" in entry for entry in log)
+
+
+def test_move_fuzzy_exact_match_left_unchanged():
+    # When a move already matches a known_moves entry exactly, it must
+    # be preserved and NOT produce a move_fuzzy log entry — otherwise
+    # every clean team would ship with spurious normalizations.
+    d = _draft(ChampionsTeamPokemon(slot=1, pokemon="X", move1="Close Combat"))
+    normed, log = normalize(d, known_moves={"Close Combat", "Protect"})
+    assert normed.pokemon[0].move1 == "Close Combat"
+    assert not any("move_fuzzy" in entry for entry in log)
