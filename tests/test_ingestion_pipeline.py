@@ -63,3 +63,78 @@ async def test_ingest_x_and_blog_not_implemented_yet(db_path: Path):
     result = await ingest_url("https://x.com/u/status/1", db_path=db_path)
     assert result.status == "rejected"
     assert result.reason == "tier_not_implemented"
+
+
+async def test_ingest_empty_pokepaste_returns_parse_failed(db_path: Path):
+    with patch(
+        "smogon_vgc_mcp.fetcher.ingestion.pipeline.fetch_pokepaste",
+        new=AsyncMock(return_value=FetchResult.ok("")),
+    ):
+        result = await ingest_url("https://pokepast.es/empty", db_path=db_path)
+    assert result.status == "parse_failed"
+    assert result.team_row_id is None
+
+
+async def test_ingest_pokepaste_review_pending_when_confidence_low(db_path: Path):
+    # Two soft failures (unknown nature + unknown tera type) drops 1.0 → 0.8 < 0.85
+    text = (
+        "Koraidon @ Life Orb\nAbility: Orichalcum Pulse\nLevel: 50\n"
+        "Tera Type: Plasma\nEVs: 32 Atk\nFooNature Nature\n"
+        "- Flare Blitz\n- Protect\n- Collision Course\n- Dragon Claw"
+    )
+    with patch(
+        "smogon_vgc_mcp.fetcher.ingestion.pipeline.fetch_pokepaste",
+        new=AsyncMock(return_value=FetchResult.ok(text)),
+    ):
+        result = await ingest_url("https://pokepast.es/soft", db_path=db_path)
+    assert result.status == "review_pending"
+    assert result.team_row_id is not None
+    assert result.confidence == pytest.approx(0.8)
+    async with get_connection(db_path) as db:
+        stored = await get_champions_team(db, result.team_row_id)
+    assert stored.ingestion_status == "review_pending"
+    assert stored.review_reasons is not None
+    assert "nature_unknown" in stored.review_reasons
+    assert "tera_type_unknown" in stored.review_reasons
+
+
+async def test_ingest_pokepaste_parse_exception_returns_parse_failed(db_path: Path):
+    # Force parse_pokepaste_to_champions_draft to raise; pipeline should wrap it.
+    def boom(*a, **kw):
+        raise ValueError("boom")
+
+    with (
+        patch(
+            "smogon_vgc_mcp.fetcher.ingestion.pipeline.fetch_pokepaste",
+            new=AsyncMock(return_value=FetchResult.ok("anything")),
+        ),
+        patch(
+            "smogon_vgc_mcp.fetcher.ingestion.pipeline.parse_pokepaste_to_champions_draft",
+            new=boom,
+        ),
+    ):
+        result = await ingest_url("https://pokepast.es/exc", db_path=db_path)
+    assert result.status == "fetch_failed"
+    assert result.reason is not None
+    assert "Failed to parse pokepaste" in result.reason
+
+
+def test_score_arithmetic_matches_threshold():
+    from smogon_vgc_mcp.database.models import ChampionsTeamDraft
+    from smogon_vgc_mcp.fetcher.ingestion.pipeline import (
+        AUTO_WRITE_THRESHOLD,
+        _score,
+    )
+
+    draft = ChampionsTeamDraft(
+        source_type="pokepaste",
+        source_url="https://x",
+        tier_baseline_confidence=1.0,
+    )
+    assert _score(draft, 0) == pytest.approx(1.0)
+    assert _score(draft, 1) == pytest.approx(0.9)
+    assert _score(draft, 2) == pytest.approx(0.8)
+    assert _score(draft, 100) == 0.0
+    # one soft failure stays auto, two flips to review_pending
+    assert _score(draft, 1) >= AUTO_WRITE_THRESHOLD
+    assert _score(draft, 2) < AUTO_WRITE_THRESHOLD

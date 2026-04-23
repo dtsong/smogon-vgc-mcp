@@ -31,7 +31,11 @@ async def main_async(argv: list[str], *, db_path: Path | None = None) -> int:
 
 
 def main() -> None:
-    sys.exit(asyncio.run(main_async(sys.argv[1:])))
+    try:
+        sys.exit(asyncio.run(main_async(sys.argv[1:])))
+    except Exception as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        sys.exit(3)
 
 
 if __name__ == "__main__":

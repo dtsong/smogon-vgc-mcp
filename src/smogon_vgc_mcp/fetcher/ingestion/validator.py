@@ -6,7 +6,7 @@ Emits a ValidationReport with hard/soft failure reason codes.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from smogon_vgc_mcp.database.models import ChampionsTeamDraft, ChampionsTeamPokemon
 
@@ -17,9 +17,8 @@ SP_TOTAL_MAX = 66
 @dataclass(frozen=True)
 class ValidationReport:
     passed: bool
-    hard_failures: list[str] = field(default_factory=list)
-    soft_failures: list[str] = field(default_factory=list)
-    normalizations: list[str] = field(default_factory=list)
+    hard_failures: tuple[str, ...] = ()
+    soft_failures: tuple[str, ...] = ()
 
 
 def _check_sp_numeric(poke: ChampionsTeamPokemon) -> list[str]:
@@ -122,7 +121,6 @@ def _check_ability_and_moves(poke: ChampionsTeamPokemon, dex: DexLookup | None) 
     for move in moves:
         if move and move not in entry["moves"]:
             soft.append("move_illegal")
-            break
     return soft
 
 
@@ -166,6 +164,6 @@ def validate(
 
     return ValidationReport(
         passed=not hard,
-        hard_failures=hard,
-        soft_failures=soft,
+        hard_failures=tuple(hard),
+        soft_failures=tuple(soft),
     )

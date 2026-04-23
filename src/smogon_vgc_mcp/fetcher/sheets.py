@@ -295,8 +295,10 @@ async def ingest_champions_sheet(db_path: Path | None = None) -> dict[str, int]:
 
     Returns a counter dict of status -> count.
     """
+    await init_database(db_path)
     sheet_url = get_sheet_csv_url("champions_ma")
     if not sheet_url:
+        logger.error("ingest_champions_sheet: no sheet_gid configured for champions_ma")
         return {"auto": 0, "review_pending": 0, "rejected": 0, "fetch_failed": 0, "parse_failed": 0}
 
     fetched = await fetch_text_resilient(sheet_url, service="sheets")
@@ -314,11 +316,15 @@ async def ingest_champions_sheet(db_path: Path | None = None) -> dict[str, int]:
         "parse_failed": 0,
     }
 
-    for row in rows[1:]:  # skip header
+    for row in rows[1:]:
         url = next((c for c in row if c.startswith(("http://", "https://"))), "")
         if not url:
             continue
-        result = await ingest_url(url, db_path=db_path)
-        counts[result.status] = counts.get(result.status, 0) + 1
+        try:
+            result = await ingest_url(url, db_path=db_path)
+            counts[result.status] = counts.get(result.status, 0) + 1
+        except Exception as exc:
+            logger.error("ingest_champions_sheet: unhandled error for url=%s: %s", url, exc)
+            counts["fetch_failed"] = counts.get("fetch_failed", 0) + 1
 
     return counts

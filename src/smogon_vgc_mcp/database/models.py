@@ -1,6 +1,12 @@
 """Data models for Smogon VGC stats."""
 
 from dataclasses import dataclass, field
+from typing import Literal
+
+ChampionsSourceType = Literal["sheet", "pokepaste", "x", "blog"]
+ChampionsIngestionStatus = Literal[
+    "auto", "review_pending", "labeled", "fetch_failed", "parse_failed"
+]
 
 
 @dataclass
@@ -323,10 +329,9 @@ class ChampionsTeam:
     """A Champions team as stored in champions_teams."""
 
     team_id: str
-    source_type: str              # 'sheet' | 'pokepaste' | 'x' | 'blog'
+    source_type: ChampionsSourceType
     source_url: str
-    # 'auto' | 'review_pending' | 'labeled' | 'fetch_failed' | 'parse_failed'
-    ingestion_status: str
+    ingestion_status: ChampionsIngestionStatus
     confidence_score: float
     format: str = "champions_ma"
     description: str | None = None
@@ -338,9 +343,13 @@ class ChampionsTeam:
 
 @dataclass
 class ChampionsTeamDraft:
-    """In-flight team from an extractor before validation/write."""
+    """In-flight team from an extractor before validation/write.
 
-    source_type: str
+    Missing ``team_id``, ``ingestion_status``, and ``confidence_score`` —
+    the pipeline assigns these after validation, not extractors.
+    """
+
+    source_type: ChampionsSourceType
     source_url: str
     tier_baseline_confidence: float
     description: str | None = None

@@ -44,3 +44,53 @@ async def test_ingest_champions_sheet_routes_by_url_shape(db_path: Path):
     assert report["auto"] == 1
     assert report["rejected"] == 2
     assert report["fetch_failed"] == 0
+
+
+async def test_ingest_champions_sheet_fetch_failure_records_counter(db_path: Path):
+    from smogon_vgc_mcp.resilience import ErrorCategory, ServiceError
+
+    err = ServiceError(
+        category=ErrorCategory.HTTP_CLIENT_ERROR,
+        service="sheets",
+        message="503",
+        is_recoverable=True,
+    )
+    with patch(
+        "smogon_vgc_mcp.fetcher.sheets.fetch_text_resilient",
+        new=AsyncMock(return_value=FetchResult.fail(err)),
+    ):
+        report = await ingest_champions_sheet(db_path=db_path)
+    assert report["fetch_failed"] == 1
+    assert report["auto"] == 0
+    assert report["rejected"] == 0
+
+
+async def test_ingest_champions_sheet_per_row_exception_isolated(db_path: Path):
+    sheet_csv = "URL\nhttps://pokepast.es/a\nhttps://pokepast.es/b\n"
+    call_count = {"n": 0}
+
+    async def flaky_fetch(url: str):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            raise RuntimeError("simulated transient error")
+        return FetchResult.ok(
+            "Koraidon @ Life Orb\nAbility: Orichalcum Pulse\nLevel: 50\n"
+            "EVs: 32 Atk\nAdamant Nature\n"
+            "- Flare Blitz\n- Protect\n- Collision Course\n- Dragon Claw"
+        )
+
+    with (
+        patch(
+            "smogon_vgc_mcp.fetcher.sheets.fetch_text_resilient",
+            new=AsyncMock(return_value=FetchResult.ok(sheet_csv)),
+        ),
+        patch(
+            "smogon_vgc_mcp.fetcher.ingestion.pipeline.fetch_pokepaste",
+            new=flaky_fetch,
+        ),
+    ):
+        report = await ingest_champions_sheet(db_path=db_path)
+
+    # First row crashes → fetch_failed, second succeeds → auto
+    assert report["fetch_failed"] == 1
+    assert report["auto"] == 1

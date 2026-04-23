@@ -3,36 +3,39 @@
 Routes a URL through the classifier to the appropriate tier handler,
 then normalizes, validates, and writes (or queues) the result.
 
-Phases 3-6 will register additional tier handlers by extending
-``_TIER_HANDLERS``.
+Additional tiers are added by inserting a branch in ``ingest_url``
+and wiring a ``_fetch_tierN`` coroutine.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from smogon_vgc_mcp.database.champions_team_queries import (
     compute_team_fingerprint,
     write_or_queue_team,
 )
 from smogon_vgc_mcp.database.models import ChampionsTeam, ChampionsTeamDraft
-from smogon_vgc_mcp.database.schema import get_connection
+from smogon_vgc_mcp.database.schema import get_connection, init_database
 from smogon_vgc_mcp.fetcher.ingestion.classifier import Tier, classify_url
 from smogon_vgc_mcp.fetcher.ingestion.normalizer import normalize
 from smogon_vgc_mcp.fetcher.ingestion.tier1_pokepaste import (
     parse_pokepaste_to_champions_draft,
 )
 from smogon_vgc_mcp.fetcher.ingestion.validator import validate
-from smogon_vgc_mcp.fetcher.pokepaste import fetch_pokepaste  # re-imported for patchability
-from smogon_vgc_mcp.resilience import FetchResult
+from smogon_vgc_mcp.fetcher.pokepaste import fetch_pokepaste
+from smogon_vgc_mcp.resilience import ErrorCategory, FetchResult, ServiceError
 
 AUTO_WRITE_THRESHOLD = 0.85
+
+IngestStatus = Literal["auto", "review_pending", "fetch_failed", "parse_failed", "rejected"]
 
 
 @dataclass(frozen=True)
 class IngestResult:
-    status: str  # 'auto' | 'review_pending' | 'fetch_failed' | 'parse_failed' | 'rejected'
+    status: IngestStatus
     team_row_id: int | None = None
     confidence: float | None = None
     reason: str | None = None
@@ -42,7 +45,18 @@ async def _fetch_tier1(url: str) -> FetchResult[ChampionsTeamDraft]:
     fetched = await fetch_pokepaste(url)
     if not fetched.success or not fetched.data:
         return FetchResult.fail(fetched.error) if fetched.error else FetchResult.ok(None)
-    draft = parse_pokepaste_to_champions_draft(fetched.data, source_url=url)
+    try:
+        draft = parse_pokepaste_to_champions_draft(fetched.data, source_url=url)
+    except Exception as exc:
+        return FetchResult.fail(
+            ServiceError(
+                category=ErrorCategory.PARSE_ERROR,
+                service="pokepaste",
+                message=f"Failed to parse pokepaste from {url}: {exc}",
+            )
+        )
+    if not draft.pokemon:
+        return FetchResult.ok(None)
     return FetchResult.ok(draft)
 
 
@@ -51,6 +65,7 @@ def _score(draft: ChampionsTeamDraft, soft_count: int) -> float:
 
 
 async def ingest_url(url: str, *, db_path: Path | None = None) -> IngestResult:
+    await init_database(db_path)
     tier = classify_url(url)
 
     if tier == Tier.UNKNOWN:
@@ -85,12 +100,19 @@ async def ingest_url(url: str, *, db_path: Path | None = None) -> IngestResult:
         source_url=normalized.source_url,
         ingestion_status=status,
         confidence_score=confidence,
-        review_reasons=report.hard_failures + report.soft_failures or None,
+        review_reasons=list(report.hard_failures + report.soft_failures) or None,
         normalizations=norm_log or None,
         pokemon=normalized.pokemon,
     )
 
-    async with get_connection(db_path) as db:
-        row_id = await write_or_queue_team(db, team)
+    try:
+        async with get_connection(db_path) as db:
+            row_id = await write_or_queue_team(db, team)
+    except Exception as exc:
+        return IngestResult(
+            status="parse_failed",
+            confidence=confidence,
+            reason=f"db_write_error: {exc}",
+        )
 
     return IngestResult(status=status, team_row_id=row_id, confidence=confidence)

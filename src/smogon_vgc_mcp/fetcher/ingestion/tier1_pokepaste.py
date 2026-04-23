@@ -9,8 +9,7 @@ numbers now represent Stat Points).
 from __future__ import annotations
 
 from smogon_vgc_mcp.database.models import ChampionsTeamDraft, ChampionsTeamPokemon
-from smogon_vgc_mcp.fetcher.pokepaste import fetch_pokepaste, parse_pokepaste
-from smogon_vgc_mcp.resilience import FetchResult
+from smogon_vgc_mcp.fetcher.pokepaste import parse_pokepaste
 
 
 def parse_pokepaste_to_champions_draft(
@@ -48,12 +47,3 @@ def parse_pokepaste_to_champions_draft(
         tier_baseline_confidence=1.0,
         pokemon=pokemon,
     )
-
-
-async def fetch_and_parse_pokepaste(url: str) -> FetchResult[ChampionsTeamDraft]:
-    """Fetch a pokepaste URL and return a ChampionsTeamDraft."""
-    fetched = await fetch_pokepaste(url)
-    if not fetched.success or not fetched.data:
-        return FetchResult.fail(fetched.error) if fetched.error else FetchResult.ok(None)
-    draft = parse_pokepaste_to_champions_draft(fetched.data, source_url=url)
-    return FetchResult.ok(draft)

@@ -1,8 +1,9 @@
 """Deterministic normalizer for Champions team drafts.
 
 Runs before the validator. Fixes common surface-level issues (case,
-aliases, whitespace, fuzzy move spelling) and logs every change so
-the audit trail can detect LLM drift.
+aliases, whitespace, fuzzy move spelling) and logs every change so the
+stored ``normalizations`` column provides an auditable diff between
+raw extraction and final values.
 """
 
 from __future__ import annotations

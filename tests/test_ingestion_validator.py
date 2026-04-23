@@ -14,7 +14,7 @@ def _draft(*pokes: ChampionsTeamPokemon) -> ChampionsTeamDraft:
 def test_valid_team_passes():
     rep = validate(_draft(ChampionsTeamPokemon(slot=1, pokemon="Koraidon", sp_atk=32, sp_spe=32)))
     assert rep.passed
-    assert rep.hard_failures == []
+    assert rep.hard_failures == ()
 
 
 def test_sp_over_per_stat_flagged():

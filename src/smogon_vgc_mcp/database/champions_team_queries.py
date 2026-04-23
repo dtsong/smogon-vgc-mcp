@@ -13,8 +13,10 @@ from smogon_vgc_mcp.database.models import ChampionsTeam, ChampionsTeamPokemon
 def compute_team_fingerprint(pokemon: list[ChampionsTeamPokemon]) -> str:
     """Stable SHA256 of the team's structural content.
 
-    Move order within a set is normalized (sorted) so a team that
-    reorders moves doesn't produce a different fingerprint.
+    Pokemon are sorted by ``(slot, pokemon)`` and moves within a set
+    are sorted before hashing — reordering moves within a slot does
+    not change the fingerprint, but reassigning a species to a
+    different slot does.
     """
     canonical = []
     for p in sorted(pokemon, key=lambda x: (x.slot, x.pokemon.casefold())):
@@ -72,6 +74,8 @@ async def write_or_queue_team(db: aiosqlite.Connection, team: ChampionsTeam) -> 
         ),
     )
     team_row_id = cursor.lastrowid
+    if team_row_id is None:
+        raise RuntimeError("INSERT into champions_teams returned no lastrowid")
 
     for poke in team.pokemon:
         await db.execute(

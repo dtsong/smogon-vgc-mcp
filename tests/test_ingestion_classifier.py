@@ -9,6 +9,7 @@ from smogon_vgc_mcp.fetcher.ingestion.classifier import Tier, classify_url
         ("https://pokepast.es/abc123", Tier.POKEPASTE),
         ("http://pokepast.es/abc123", Tier.POKEPASTE),
         ("https://pokepast.es/abc123/raw", Tier.POKEPASTE),
+        ("https://www.pokepast.es/abc123", Tier.POKEPASTE),
         ("https://twitter.com/user/status/12345", Tier.X),
         ("https://x.com/user/status/12345", Tier.X),
         ("https://mobile.twitter.com/user/status/12345", Tier.X),
