@@ -12,6 +12,7 @@ and wiring a ``_fetch_tierN`` coroutine.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -57,7 +58,7 @@ class IngestResult:
 
 async def _fetch_tier1(url: str) -> FetchResult[ChampionsTeamDraft]:
     fetched = await fetch_pokepaste(url)
-    if not fetched.success or not fetched.data:
+    if not fetched.success or fetched.data is None or fetched.data == "":
         if fetched.error is not None:
             return FetchResult.fail(fetched.error)
         # Empty body on a 2xx (e.g. rate-limit HTML scrubbed or a CDN
@@ -67,10 +68,12 @@ async def _fetch_tier1(url: str) -> FetchResult[ChampionsTeamDraft]:
         return FetchResult.ok(None)
     try:
         draft = parse_pokepaste_to_champions_draft(fetched.data, source_url=url)
-    except (ValueError, KeyError, IndexError, AttributeError, TypeError) as exc:
+    except (ValueError, KeyError, IndexError, AttributeError, TypeError, re.error) as exc:
         # Narrow catch — parser bugs surface as real parse errors; let
         # system-level failures (MemoryError, RecursionError) propagate
         # so a resource-exhaustion crash isn't mislabeled parse_failed.
+        # re.error is included because the parser uses regex and any
+        # future dynamic pattern would raise this on malformed input.
         return FetchResult.fail(
             ServiceError(
                 category=ErrorCategory.PARSE_ERROR,
@@ -184,7 +187,12 @@ async def ingest_url(
         dex_lookup = await load_dex_lookup(db_path)
 
     draft = fetched.data
-    normalized, norm_log = normalize(draft)
+    # Flatten dex into a known-moves set so the normalizer's fuzzy-move
+    # correction actually fires in production (no-op when dex is absent).
+    known_moves: set[str] | None = None
+    if dex_lookup is not None:
+        known_moves = {m for entry in dex_lookup.values() for m in entry["moves"]}
+    normalized, norm_log = normalize(draft, known_moves=known_moves)
     report = validate(normalized, dex_lookup=dex_lookup)
 
     if report.hard_failures:
@@ -210,11 +218,12 @@ async def ingest_url(
     try:
         async with get_connection(db_path) as db:
             row_id = await write_or_queue_team(db, team)
-    except (aiosqlite.Error, OSError) as exc:
-        # Narrow catch — only genuine DB/disk failures map to db_error.
-        # Programmer bugs (TypeError/AttributeError) propagate so they
-        # surface as real crashes instead of silently re-queuing under
-        # a misleading "retry the DB write" signal.
+    except (aiosqlite.Error, OSError, RuntimeError) as exc:
+        # Narrow catch — genuine DB/disk failures and write_or_queue_team's
+        # RuntimeError for a missing lastrowid (a DB-layer contract
+        # violation, not a programming bug) both bucket to db_error.
+        # Programmer bugs (TypeError/AttributeError) still propagate so
+        # they surface as real crashes instead of silently re-queuing.
         logger.exception("ingest_url: db write failed for url=%s", url)
         return IngestResult(
             status="db_error",
